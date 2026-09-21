@@ -22,27 +22,39 @@ Both are on out of the box and neither normally needs touching. The ini is
 read once, when the game starts.
 
 - **KeepCatch** (1) Keeps hold of the catch through the teleport. Four places
-  let go of one and all four are skipped.
+  let go of one and all four are skipped, but only from the moment a map
+  teleport starts with you holding someone until that carry ends. The rest of
+  the time the game lets go of things exactly as it always has.
 - **KeepCarried** (1) Keeps the man himself. Leaving a field removes every
   actor spawned in it unless something says it still holds him, and this says
   so. On its own it does nothing, because the release runs first and clears
   the flag it reads.
 
-## Before you report a stuck carry
+## Stuck carrying something
 
-KeepCatch's fourth patch is the game's own cleanup for a catch that has gone
-stale, and it is off for every catch in the world rather than only yours. It
-exists to unstick a carry whose animation died. If a pickup ever breaks
-halfway and leaves you stuck carrying nothing, set `KeepCatch=0`, start the
-game, and it clears.
+1.0.0 skipped the four releases for the whole session. They are also how the
+game finishes petting an animal, puts away a note you have read and drops a
+bounty when a grab is interrupted, so players got frozen over dogs, stuck
+holding notes they had stored, and wearing half-grabbed outlaws. 1.0.1 only
+skips them during a teleport carry.
 
-## If something is wrong
+If you are ever stuck anyway, set `KeepCatch=0`, start the game once, and it
+clears. Then send the log.
 
-`BountyTeleportation.log` is written beside the plugin and is about twenty lines a
-session. It names every address it wrote and every time it told the game to
-keep somebody. Attach it to a post on the bugs tab or a GitHub issue.
+## If something is wrong, send the log
 
-Five addresses are written or hooked and each is checked against the bytes
+Nothing can be fixed without it. `BountyTeleportation.log` is written beside
+the plugin in bin64 and is a few dozen lines, so attach the whole file. It
+says every time a teleport armed the four releases and every time they came
+back out, and if a problem happened with no teleport line near it, that shows
+this mod was not involved.
+
+The log from the session before is `BountyTeleportation.01.log`, and older
+ones go up to `.24`, so if you have already restarted the game, attach the one
+from the session where it happened. Post it on the bugs tab or as a GitHub
+issue.
+
+Six addresses are written or hooked and each is checked against the bytes
 that should be there first. On a game update they will not match, and the
 plugin then writes nothing and says in the log which check failed. Everything
 it wrote is put back if it is unloaded.
@@ -53,15 +65,15 @@ loaded refuses and says so.
 
 ## Antivirus
 
-VirusTotal counts 1.0.0 at 0/70 for the plugin, and both archives come back
-clean as well. The Nexus page carries the per-archive numbers and links to
-the reports; they are left out here because this file travels inside one of
-the archives it would be reporting on.
+The VirusTotal results for each release are on the Nexus page, with links to
+the reports. They are not here because this file travels inside one of the
+archives it would be reporting on, and quoting a count here changes the
+archive it describes.
 
 A scanner may still flag `BountyTeleportation.asi` one day, because the shape
 of what it does looks like a trainer to a model: it is a DLL loaded into the
-game that writes jumps over four of the game's own functions and hooks a
-fifth. It imports kernel32 and nothing else, so there is no network code and
+game that writes jumps over four of the game's own functions and hooks two
+more. It imports kernel32 and nothing else, so there is no network code and
 no window in it, and it reads and writes no registry key and no game file. It
 is code signed, and Properties, Digital Signatures shows Seth Walker under
 Microsoft's identity-verified chain.

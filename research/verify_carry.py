@@ -76,5 +76,16 @@ check("check prologue", hexs(rd(CHECK, 9)), "48 89 5C 24 08 44 8B 41 1C")
 check("thunk jumps to", f"+0x{rel32(THUNK, 0xE9):X}", f"+0x{CHECK:X}")
 check("sweep calls", f"+0x{rel32(SWEEP, 0xE8):X}", f"+0x{THUNK:X}")
 
+print("the map teleport, where 1.0.1 arms the releases")
+TELEPORT = 0x2BC9640
+check("handler prologue", hexs(rd(TELEPORT, 15)),
+      "48 8B C4 48 89 58 10 48 89 70 18 48 89 78 20")
+for site in (0x2BCA55D, 0x2BCAB00):
+    check(f"call at +0x{site:X}", f"+0x{rel32(site, 0xE8):X}", f"+0x{TELEPORT:X}")
+# The first release runs from inside the handler, after the moves, so arming
+# at its entry is early enough. If this call ever moves before the entry
+# check could run, arming there would be too late.
+check("release call inside it", hexs(rd(0x2BC9928, 6)), "FF 90 00 02 00 00")
+
 print("ALL MATCH" if ok else "MISMATCHES ABOVE")
 sys.exit(0 if ok else 1)

@@ -1,8 +1,9 @@
 # Bounty Teleportation
 
 Fast travel while carrying a bounty target in Crimson Desert. He rides along
-on your back and is still worth turning in at the other end. Built and tested
-on 2.03.00, exe 1.0.0.2944.
+on your back and is still worth turning in at the other end. Built on 2.03.00,
+exe 1.0.0.2944. 1.0.0 was tested in game; 1.0.1 went out untested, so reports
+with the log attached are what shows whether it works.
 
 Without it the teleport goes through and the outlaw does not. Two separate
 things remove him during the confirm: the teleport releases the catch, and
@@ -34,10 +35,21 @@ fix to the log, the memory reads or the hook engine lands in both plugins.
 
 ## What it patches
 
-Five addresses, each checked against the bytes that should be there before
+Six addresses, each checked against the bytes that should be there before
 anything is written, and all of it put back if the plugin is unloaded. A game
 update moves them; the plugin then writes nothing and names the failed check
 in its log.
+
+The four catch releases are only written during a teleport carry. 1.0.0 wrote
+them for the whole session, and they turned out to be how the game also ends
+petting an animal, putting a note away and an interrupted grab, so players got
+stuck in all three. 1.0.1 hooks the map teleport handler at `+0x2BC9640`,
+which has two callers, both in the teleport's message handler, and which moves
+the player before calling the first release at `+0x2BC9928`. If the player is
+holding something when it starts, the releases are written there, and they
+come out again when the sweep keeps nobody within five seconds, when the kept
+outlaw is no longer carried, or when the player is no longer holding
+anything.
 
 Carrying an actor is a catch, and `catch_update` at `+0x20AD3A0` ends one.
 Four callers reach it. Three are on the teleport path: the server's character
@@ -50,13 +62,13 @@ The departure sweep asks whether anyone else holds an actor through a thunk at
 `+0x1F53D10` into `+0xE1478D0`, and on no it removes it. The plugin hooks that
 check and answers yes for an actor whose catch component names a carrier.
 
-`research\verify_carry.py` reads all five out of the executable and checks
+`research\verify_carry.py` reads all six out of the executable and checks
 them, which is the test to run first if an update breaks the mod.
 
 ## Antivirus
 
-VirusTotal counts 1.0.0 at 0/70 for the plugin, 0/68 for the DMM archive
-and 0/67 for the manual one.
+VirusTotal counts the plugin at 0/71 for 1.0.1 and 0/70 for 1.0.0, and
+1.0.1's archives at 0/68 for the DMM one and 0/67 for the manual one.
 The plugin imports kernel32 and nothing else, reads and writes no registry key
 and no game file, and is signed under Microsoft's identity-verified chain as
 Seth Walker. A scanner may still object one day to a DLL that writes jumps

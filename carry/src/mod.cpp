@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <intrin.h>
 
 #include "core/log.h"
 #include "core/paths.h"
@@ -101,7 +102,12 @@ namespace
         return at + 5 + static_cast<uintptr_t>(static_cast<intptr_t>(rel));
     }
 
-    bool PatchRelease(const Release& r)
+    constexpr int kReleaseCount = static_cast<int>(sizeof kReleases / sizeof kReleases[0]);
+    int g_releaseIdx[kReleaseCount] = { -1, -1, -1, -1 };
+
+    // Checks one release against the executable and registers its patch
+    // without writing it. Returns the patch index, or -1.
+    int RegisterRelease(const Release& r)
     {
         const uintptr_t base = bp::mem::Game().base;
         const uintptr_t target = BranchTarget(r.call, 0xE8);
@@ -110,14 +116,14 @@ namespace
             LOG_ERR("[%s] the call at +0x%llX goes to +0x%llX and not to catch_update at +0x%llX, so this is not "
                     "the release; nothing written", r.label, static_cast<unsigned long long>(r.call),
                     static_cast<unsigned long long>(target), static_cast<unsigned long long>(kCatchUpdate));
-            return false;
+            return -1;
         }
         uint8_t guard[16] = {};
         if (!bp::mem::ReadBytes(base + r.guard, guard, r.shapeLen) || memcmp(guard, r.shape, r.shapeLen) != 0)
         {
             LOG_ERR("[%s] the test at +0x%llX is not the catch check this build should have; nothing written",
                     r.label, static_cast<unsigned long long>(r.guard));
-            return false;
+            return -1;
         }
         if (r.vtable)
         {
@@ -127,31 +133,208 @@ namespace
                 LOG_ERR("[%s] slot 0x200 of the vtable at +0x%llX is 0x%llX and not +0x%llX; nothing written",
                         r.label, static_cast<unsigned long long>(r.vtable), static_cast<unsigned long long>(slot),
                         static_cast<unsigned long long>(r.slotTarget));
-                return false;
+                return -1;
             }
             if (r.thunkTo && BranchTarget(r.slotTarget, 0xE9) != r.thunkTo)
             {
                 LOG_ERR("[%s] the thunk at +0x%llX does not jump to +0x%llX; nothing written", r.label,
                         static_cast<unsigned long long>(r.slotTarget),
                         static_cast<unsigned long long>(r.thunkTo));
-                return false;
+                return -1;
             }
         }
-        return bp::patch::Apply(r.label, r.at, r.orig, r.repl, 2);
+        return bp::patch::Register(r.label, r.at, r.orig, r.repl, 2);
     }
 
-    void ApplyKeepCatch()
+    bool RegisterKeepCatch()
     {
         int done = 0;
-        for (const Release& r : kReleases) if (PatchRelease(r)) ++done;
-        const int total = static_cast<int>(sizeof kReleases / sizeof kReleases[0]);
-        if (done == total)
-            LOG_OK("[keepcatch] all %d releases are skipped, so a map teleport leaves the catch alone and both "
-                   "sides still say the player is carrying", total);
+        for (int i = 0; i < kReleaseCount; ++i)
+        {
+            g_releaseIdx[i] = RegisterRelease(kReleases[i]);
+            if (g_releaseIdx[i] >= 0) ++done;
+        }
+        if (done == kReleaseCount)
+        {
+            LOG_OK("[keepcatch] all %d releases check out and are ready. None is written until a map teleport "
+                   "starts with something held, and each comes out again when that carry ends.", kReleaseCount);
+            return true;
+        }
+        LOG_ERR("[keepcatch] only %d of %d releases check out, so none will be used: skipping some and not "
+                "others leaves the two sides disagreeing about what is carried.", done, kReleaseCount);
+        for (int& i : g_releaseIdx) i = -1;
+        return false;
+    }
+
+    // ---- when the releases are skipped ------------------------------------
+    //
+    // 1.0.0 skipped all four releases for the whole session. They are not
+    // only the teleport's: petting an animal, putting a note away and a grab
+    // interrupted by a hit all end through the same catch_update, and the
+    // watchdog in particular is how the game clears a catch whose animation
+    // has gone. Three bug reports on 21 September 2026 were players left
+    // frozen over a dog, holding a note they had stored, or with a bounty
+    // stuck to their back, none of them anywhere near a teleport.
+    //
+    // So they are armed. A map teleport runs +0x2BC9640 once per confirm,
+    // reached only from the teleport's message handler (+0x2BCA55D and
+    // +0x2BCAB00), and it moves the player and then calls the first release
+    // at +0x2BC9928. If the player is holding something when it starts, the
+    // four releases are written there, before any of them can run. They stay
+    // written while that carry lasts and come out when it ends: the sweep
+    // kept nobody within five seconds, or the outlaw it kept is no longer
+    // carried, or the player is no longer holding anything.
+    constexpr uintptr_t kTeleport       = 0x2BC9640;
+    constexpr uintptr_t kTeleportCall1  = 0x2BCA55D;
+    constexpr uintptr_t kTeleportCall2  = 0x2BCAB00;
+    constexpr ULONGLONG kNoKeepMs       = 5000;
+    constexpr int       kEndPolls       = 3;     // 300 ms of "not carried" before believing it
+
+    SRWLOCK             g_armLock = SRWLOCK_INIT;
+    std::atomic<bool>   g_armed{false};
+    ULONGLONG           g_armedAt = 0;
+    uintptr_t           g_playerCatch = 0;
+    std::atomic<uintptr_t> g_keptCatch{0};
+    int                 g_endStrikes = 0;
+    long                g_arms = 0;
+
+    bool CatchComponent(uintptr_t actor, uintptr_t* out)
+    {
+        uintptr_t table = 0, catchc = 0;
+        if (!bp::mem::ReadPtr(actor + 0x68, &table)) return false;
+        if (!bp::mem::ReadPtr(table + 0x70, &catchc)) return false;
+        const char* cls = bp::mem::RttiShort(catchc);
+        if (!cls || !strstr(cls, "CatchActorComponent")) return false;
+        *out = catchc;
+        return true;
+    }
+
+    bool StillCatch(uintptr_t catchc)
+    {
+        if (!catchc || !bp::mem::Readable(catchc, 0x40)) return false;
+        const char* cls = bp::mem::RttiShort(catchc);
+        return cls && strstr(cls, "CatchActorComponent");
+    }
+
+    // Writes or removes all four together. Called with the lock held.
+    bool SetReleases(bool on)
+    {
+        bool ok = true;
+        for (int i : g_releaseIdx) if (i >= 0) ok = bp::patch::Set(i, on) && ok;
+        return ok;
+    }
+
+    void Arm(uintptr_t playerCatch, uint32_t held)
+    {
+        AcquireSRWLockExclusive(&g_armLock);
+        const bool was = g_armed.load();
+        const bool ok = SetReleases(true);
+        g_armed.store(ok);
+        g_armedAt = GetTickCount64();
+        g_playerCatch = playerCatch;
+        g_endStrikes = 0;
+        if (!was) g_keptCatch.store(0);
+        ++g_arms;
+        const long n = g_arms;
+        ReleaseSRWLockExclusive(&g_armLock);
+        if (ok)
+            LOG("[teleport] %ld: a map teleport started with the player holding 0x%08X, so the four releases are "
+                "written until that carry ends%s", n, held, was ? " (it was already armed from the last one)" : "");
         else
-            LOG_ERR("[keepcatch] %d of %d releases were patched. The rest still run and the two sides will "
-                    "disagree about what is being carried, so turn KeepCatch off until this is sorted out.",
-                    done, total);
+            LOG_ERR("[teleport] %ld: a map teleport started with the player holding 0x%08X, but the releases "
+                    "could not all be written; the game will release him as it always has", n, held);
+    }
+
+    void Disarm(const char* why)
+    {
+        AcquireSRWLockExclusive(&g_armLock);
+        if (!g_armed.load()) { ReleaseSRWLockExclusive(&g_armLock); return; }
+        SetReleases(false);
+        g_armed.store(false);
+        g_keptCatch.store(0);
+        g_playerCatch = 0;
+        g_endStrikes = 0;
+        const ULONGLONG held = GetTickCount64() - g_armedAt;
+        ReleaseSRWLockExclusive(&g_armLock);
+        LOG("[teleport] the releases are back to the game's own after %llu seconds: %s",
+            static_cast<unsigned long long>(held / 1000), why);
+    }
+
+    // The mod thread's side, ten times a second while armed.
+    void CheckCarry()
+    {
+        if (!g_armed.load()) return;
+        const uintptr_t kept = g_keptCatch.load();
+        if (!kept)
+        {
+            if (GetTickCount64() - g_armedAt > kNoKeepMs)
+                Disarm("the sweep kept nobody, so nothing came through the teleport with the player");
+            return;
+        }
+        uint32_t carriedBy = 0, held = 0;
+        const bool outlaw = StillCatch(kept) && bp::mem::Read32(kept + 0x28, &carriedBy) && carriedBy;
+        const bool player = StillCatch(g_playerCatch) && bp::mem::Read32(g_playerCatch + 0x38, &held) && held;
+        if (outlaw && player) { g_endStrikes = 0; return; }
+        if (++g_endStrikes < kEndPolls) return;
+        Disarm(!outlaw ? "the outlaw is no longer carried" : "the player is no longer holding anything");
+    }
+
+    using TeleportFn = uint64_t (*)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t);
+    TeleportFn g_teleportOrig = nullptr;
+
+    // Takes eight arguments and passes eight on. The handler reads at least
+    // six (its fifth and sixth come off the stack at [rbp+0x130] and
+    // [rbp+0x138]), and a detour that declared four would hand the original
+    // whatever happened to be in its own frame for the rest. The extra two
+    // are read from the caller's frame and passed back unchanged.
+    uint64_t TeleportDetour(uint64_t a, uint64_t b, uint64_t actor, uint64_t d,
+                            uint64_t e, uint64_t f, uint64_t g, uint64_t h)
+    {
+        uintptr_t catchc = 0;
+        uint32_t held = 0;
+        if (CatchComponent(static_cast<uintptr_t>(actor), &catchc) && bp::mem::Read32(catchc + 0x38, &held) && held)
+            Arm(catchc, held);
+        return g_teleportOrig(a, b, actor, d, e, f, g, h);
+    }
+
+    bool HookTeleport()
+    {
+        const uintptr_t base = bp::mem::Game().base;
+        // mov rax,rsp / mov [rax+10],rbx / mov [rax+18],rsi / mov [rax+20],rdi
+        static const uint8_t kHead[15] = { 0x48, 0x8B, 0xC4, 0x48, 0x89, 0x58, 0x10, 0x48,
+                                           0x89, 0x70, 0x18, 0x48, 0x89, 0x78, 0x20 };
+        uint8_t head[15] = {};
+        if (!bp::mem::ReadBytes(base + kTeleport, head, 15) || memcmp(head, kHead, 15) != 0)
+        {
+            LOG_ERR("[teleport] +0x%llX does not start the way the teleport handler does on this build, so nothing "
+                    "is hooked and the releases are never written", static_cast<unsigned long long>(kTeleport));
+            return false;
+        }
+        if (BranchTarget(kTeleportCall1, 0xE8) != kTeleport || BranchTarget(kTeleportCall2, 0xE8) != kTeleport)
+        {
+            LOG_ERR("[teleport] the teleport's message handler no longer calls +0x%llX from where it did; nothing "
+                    "is hooked", static_cast<unsigned long long>(kTeleport));
+            return false;
+        }
+        char why[160] = "";
+        if (!bp::farhook::Install("teleport", base + kTeleport, reinterpret_cast<void*>(&TeleportDetour),
+                                  reinterpret_cast<void**>(&g_teleportOrig), why, sizeof why))
+        {
+            LOG_ERR("[teleport] could not hook +0x%llX: %s", static_cast<unsigned long long>(kTeleport), why);
+            return false;
+        }
+        LOG_OK("[teleport] hooked the map teleport at +0x%llX, which is where the releases get armed",
+               static_cast<unsigned long long>(kTeleport));
+        return true;
+    }
+
+    bool KeepGate() { return g_armed.load(); }
+
+    void OnKeep(uintptr_t actor, uintptr_t catchc)
+    {
+        g_keptCatch.store(catchc);
+        LOG("[teleport] the sweep was told to keep 0x%llX, which stays armed while he is carried",
+            static_cast<unsigned long long>(actor));
     }
 
     // ---- the departure sweep ----------------------------------------------
@@ -230,24 +413,34 @@ namespace
         LOG("[mod] game image at 0x%p, %zu bytes. The addresses below were read off 2.03.00, exe 1.0.0.2944.",
             reinterpret_cast<void*>(bp::mem::Game().base), bp::mem::Game().size);
 
-        if (s.keepCatch) ApplyKeepCatch();
+        // Nothing is armed unless KeepCatch is on, the four releases all check
+        // out and the teleport hook goes in. Without the hook there is no way
+        // to know a teleport has started, and writing the releases for the
+        // whole session is what 1.0.0 did and what broke petting.
+        bool armable = false;
+        if (s.keepCatch) armable = RegisterKeepCatch() && HookTeleport();
         else LOG("[keepcatch] KeepCatch is 0, so a teleport releases the catch as it always has");
 
         if (s.keepCarried)
         {
-            if (!s.keepCatch)
-                LOG("[keepcarried] KeepCarried without KeepCatch does nothing: the release runs before the sweep "
-                    "and clears the flag this reads");
+            if (!armable)
+                LOG("[keepcarried] KeepCarried does nothing without KeepCatch armed: the release runs before the "
+                    "sweep and clears the flag this reads");
+            // The sweep hook answers only while a teleport carry is armed, and
+            // tells the carry check which outlaw it kept.
+            bp::keepcarried::SetGate(&KeepGate);
+            bp::keepcarried::SetOnKeep(&OnKeep);
             InstallKeepCarried();
         }
         else LOG("[keepcarried] KeepCarried is 0, so the departure sweep removes the carried actor as it always has");
 
-        // Nothing to do from here. The hook writes one line each time it keeps
-        // somebody, and this puts those lines on the disk: a flush from inside
-        // the hook would make the game wait on the disk on the sweep's thread.
+        // Ten times a second: end an armed carry when it is over, and put the
+        // log lines on the disk. A flush from inside a hook would make the
+        // game wait on the disk on its own thread.
         while (!g_stop.load())
         {
-            Sleep(250);
+            Sleep(100);
+            CheckCarry();
             bp::Log::Flush();
         }
         return 0;

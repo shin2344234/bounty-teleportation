@@ -38,4 +38,15 @@ namespace bp::keepcarried
     // Counts, from the mod thread: how often the check ran, how often it was
     // answered here.
     void Summarise();
+
+    // For the shipping plugin, which only wants an answer during a teleport.
+    // With a gate set, the detour answers yes only while the gate says so and
+    // lets the game answer every other time. With a keep callback set, it is
+    // told the actor and its catch component each time it keeps one. Bounty
+    // Probe sets neither and behaves as it always has. Both run on the game
+    // thread that asked, so they must be quick and must not block.
+    using Gate = bool (*)();
+    using OnKeep = void (*)(uintptr_t actor, uintptr_t catchComponent);
+    void SetGate(Gate gate);
+    void SetOnKeep(OnKeep onKeep);
 }

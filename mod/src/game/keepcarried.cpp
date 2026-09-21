@@ -15,6 +15,8 @@ namespace bp::keepcarried
         using Fn = uint64_t(*)(uint64_t comp, uint64_t key);
         Fn   g_orig = nullptr;
         bool g_requireClass = true;
+        Gate   g_gate = nullptr;
+        OnKeep g_onKeep = nullptr;
         volatile LONG g_asked = 0, g_kept = 0;
         LONG g_reportedAsked = 0, g_reportedKept = 0;
 
@@ -47,11 +49,13 @@ namespace bp::keepcarried
         uint64_t Detour(uint64_t comp, uint64_t key)
         {
             InterlockedIncrement(&g_asked);
+            if (g_gate && !g_gate()) return g_orig(comp, key);
             uintptr_t actor = 0, catchc = 0;
             uint32_t by = 0;
             if (!Carried(comp, &actor, &catchc, &by)) return g_orig(comp, key);
 
             const LONG kept = InterlockedIncrement(&g_kept);
+            if (g_onKeep) g_onKeep(actor, catchc);
             // The thunk at +0x1F53D10 jumps here, so the return address is
             // the thunk's caller: +0x2818165 when it is the sweep asking.
             const uintptr_t caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
@@ -86,6 +90,9 @@ namespace bp::keepcarried
                static_cast<unsigned long long>(bp::mem::Rva(target)));
         return true;
     }
+
+    void SetGate(Gate gate) { g_gate = gate; }
+    void SetOnKeep(OnKeep onKeep) { g_onKeep = onKeep; }
 
     void Summarise()
     {

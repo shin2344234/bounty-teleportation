@@ -47,7 +47,7 @@ if (Test-Path $verify) {
 if (-not $Unsigned) {
     $sig = Get-AuthenticodeSignature $asi
     if ($sig.Status -ne 'Valid') {
-        throw "$asi is not signed (status $($sig.Status)). Run mod\scripts\sign.ps1, or pass -Unsigned to package anyway."
+        throw "$asi is not signed (status $($sig.Status)). Run carry\scripts\sign.ps1, or pass -Unsigned to package anyway."
     }
     Write-Host ("Signed by {0}" -f $sig.SignerCertificate.Subject)
 }
