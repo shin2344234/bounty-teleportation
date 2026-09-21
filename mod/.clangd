@@ -1,0 +1,2 @@
+CompileFlags:
+  Add: [-std=c++17, -IC:/working/cd mods/Bounty Teleportation/mod/src, -IC:/working/cd mods/Bounty Teleportation/mod/build/generated]
