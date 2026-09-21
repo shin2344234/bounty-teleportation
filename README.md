@@ -53,6 +53,15 @@ check and answers yes for an actor whose catch component names a carrier.
 `research\verify_carry.py` reads all five out of the executable and checks
 them, which is the test to run first if an update breaks the mod.
 
+## Antivirus
+
+VirusTotal counts 1.0.0 at 0/70 for the plugin, 0/68 for the DMM archive
+and 0/67 for the manual one.
+The plugin imports kernel32 and nothing else, reads and writes no registry key
+and no game file, and is signed under Microsoft's identity-verified chain as
+Seth Walker. A scanner may still object one day to a DLL that writes jumps
+over four of a game's functions, which is why every line of it is here.
+
 ## Licence
 
 MIT. Third party notices are in THIRD_PARTY_NOTICES.md.

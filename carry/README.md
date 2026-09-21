@@ -51,6 +51,21 @@ Do not run this alongside Bounty Probe, the research plugin it came out of.
 They patch the same bytes and hook the same function, and the second one
 loaded refuses and says so.
 
+## Antivirus
+
+VirusTotal counts 1.0.0 at 0/70 for the plugin, and both archives come back
+clean as well. The Nexus page carries the per-archive numbers and links to
+the reports; they are left out here because this file travels inside one of
+the archives it would be reporting on.
+
+A scanner may still flag `BountyTeleportation.asi` one day, because the shape
+of what it does looks like a trainer to a model: it is a DLL loaded into the
+game that writes jumps over four of the game's own functions and hooks a
+fifth. It imports kernel32 and nothing else, so there is no network code and
+no window in it, and it reads and writes no registry key and no game file. It
+is code signed, and Properties, Digital Signatures shows Seth Walker under
+Microsoft's identity-verified chain.
+
 ## Licence
 
 MIT. See LICENSE, and THIRD_PARTY_NOTICES.md for MinHook.
