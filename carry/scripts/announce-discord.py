@@ -50,8 +50,13 @@ def from_keys(name):
 
 
 def version():
-    header = open(os.path.join(ROOT, "mod", "src", "version.h"), encoding="utf-8").read()
-    return re.search(r'BT_VERSION\s+"([^"]+)"', header).group(1)
+    # carry/src/version.h, not mod/src/version.h: that one is Bounty Probe's
+    # and carries BP_VERSION, so reading it here found no match at all.
+    header = open(os.path.join(ROOT, "carry", "src", "version.h"), encoding="utf-8").read()
+    m = re.search(r'BT_VERSION\s+"([^"]+)"', header)
+    if not m:
+        raise SystemExit("no BT_VERSION in carry/src/version.h")
+    return m.group(1)
 
 
 
