@@ -39,7 +39,7 @@ $verify = Join-Path $root 'research\verify_carry.py'
 if (Test-Path $verify) {
     & py -3 $verify | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "verify_carry.py found a mismatch; run it and read the output" }
-    Write-Host 'verify_carry.py: all five addresses match the executable'
+    Write-Host 'verify_carry.py: all six addresses match the executable'
 }
 
 # Sign before packaging, never after: these archives carry the plugin and the
