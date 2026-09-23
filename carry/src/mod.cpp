@@ -44,11 +44,12 @@ namespace
     // Every address below belongs to one game build. The 21 September 2026
     // patch from 1.0.0.2944 to 1.0.0.2949 moved most of them by 0x10 and the
     // client's and the sweep's much further, which turned 1.0.0 and 1.0.1 into
-    // plugins that check, find the wrong bytes and do nothing. Both builds are
-    // listed, and the one whose addresses all check out is the one used.
-    // research\derive_2949.py is how the second set was found: every one of
-    // them from a byte pattern or from a reference to something already found,
-    // never from an offset against the old build.
+    // plugins that check, find the wrong bytes and do nothing. The 23
+    // September patch to 1.0.0.2976 moved them again, the client release by
+    // 0x18280. Every build is listed, and the one whose addresses all check
+    // out is the one used. research\derive_2949.py is how the later sets were
+    // found: every one of them from a byte pattern or from a reference to
+    // something already found, never from an offset against the old build.
 
     struct Release
     {
@@ -102,6 +103,21 @@ namespace
     // test rather than the `je` below it: with something actually held, the
     // `jne` in between jumps past that `je` and never reads it.
     const Build kBuilds[] = {
+        {
+            "1.0.0.2976", 0x20AD400,
+            {
+                { "keepcatch", 0x2329184, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x23291A3, 0x2329164,
+                  kTeleportGuard, 16, 0x5B25468, 0x2329130, 0 },
+                { "keepcatch_client", 0x9857044, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x9857063, 0x9857024,
+                  kTeleportGuard, 16, 0x55B5460, 0x860FF0, 0x9856FF0 },
+                { "keepcatch_state", 0x156F1CD, { 0x74, 0x20 }, { 0xEB, 0x20 }, 0x156F1EA, 0x156F1AB,
+                  kTeleportGuard, 16, 0, 0, 0 },
+                { "keepcatch_watchdog", 0x20AE628, { 0x85, 0xFF }, { 0xEB, 0x44 }, 0x20AE669, 0x20AE628,
+                  kWatchdogGuard, 8, 0, 0, 0 },
+            },
+            0xDD9D1E0, 0x1F53D50, 0x28181E0,
+            0x2BC96C0, 0x2BCA5DD, 0x2BCAB80,
+        },
         {
             "1.0.0.2949", 0x20AD3B0,
             {
@@ -254,9 +270,9 @@ namespace
                 LOG_OK("[mod] this game is %s, and every address for it checks out", bld.name);
                 return &bld;
             }
-        LOG_ERR("[mod] this game matches neither %s nor %s. Nothing is written and nothing is hooked, which is "
-                "what a game patch looks like from in here. The reasons for the closest one follow.",
-                kBuilds[0].name, kBuilds[1].name);
+        LOG_ERR("[mod] this game matches none of the %zu builds this plugin knows, the newest being %s. Nothing is "
+                "written and nothing is hooked, which is what a game patch looks like from in here. The reasons "
+                "for the newest one follow.", _countof(kBuilds), kBuilds[0].name);
         BuildChecks(kBuilds[0], true);
         return nullptr;
     }
@@ -492,8 +508,8 @@ namespace
         LOG("[mod] game image at 0x%p, %zu bytes.",
             reinterpret_cast<void*>(bp::mem::Game().base), bp::mem::Game().size);
 
-        // Which game this is. Nothing is written or hooked if it is neither
-        // of the builds the addresses were read off.
+        // Which game this is. Nothing is written or hooked if it is none of
+        // the builds the addresses were read off.
         g_build = SelectBuild();
         if (!g_build)
         {

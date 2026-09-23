@@ -1,8 +1,8 @@
 # Bounty Teleportation
 
 Fast travel while carrying a bounty target. He rides along on your back and is
-still worth turning in at the other end. For Crimson Desert 2.03.00, exe
-1.0.0.2944 or 1.0.0.2949.
+still worth turning in at the other end. For Crimson Desert exe 1.0.0.2944,
+1.0.0.2949 or 1.0.0.2976.
 
 In the unmodded game the teleport happens and he does not. You arrive alone.
 
@@ -56,12 +56,14 @@ issue.
 
 Six addresses are written or hooked and each is checked against the bytes
 that should be there first. The plugin carries a set of them for each game
-build it knows, 1.0.0.2944 and 1.0.0.2949, and uses whichever the game
-matches. On a game update matching neither it writes nothing, hooks nothing,
-and the log says so. Everything it wrote is put back if it is unloaded.
+build it knows, 1.0.0.2944, 1.0.0.2949 and 1.0.0.2976, and uses whichever
+the game matches. On a game update matching none of them it writes nothing,
+hooks nothing, and the log says so. Everything it wrote is put back if it is
+unloaded.
 
 The 21 September 2026 game patch moved every one of those addresses, which is
-why 1.0.0 and 1.0.1 stopped doing anything on it.
+why 1.0.0 and 1.0.1 stopped doing anything on it. The 23 September patch moved
+them again, and 1.0.2 stops the same way on it.
 
 Do not run this alongside Bounty Probe, the research plugin it came out of.
 They patch the same bytes and hook the same function, and the second one

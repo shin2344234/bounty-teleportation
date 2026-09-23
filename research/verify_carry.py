@@ -6,8 +6,10 @@ its own worth a harness, only a table of addresses, and this is what checks
 that table. `py -3 verify_carry.py`, exit 0 when the installed game matches
 one of the builds.
 
-When a game patch moves everything, as 1.0.0.2949 did on 21 September 2026,
-`derive_2949.py` and `derive_2949b.py` are what find the new addresses.
+When a game patch moves everything, as 1.0.0.2949 did on 21 September 2026
+and 1.0.0.2976 did on 23 September, `derive_2949.py` finds the new addresses
+and `derive_2976b.py` names the class behind each vtable and picks out the
+sweep's call.
 """
 import sys, struct
 sys.path.insert(0, r"C:\working\cd mods\No more flight restrictions\private\research")
@@ -26,6 +28,17 @@ TELEPORT_HEAD  = "48 8B C4 48 89 58 10 48 89 70 18 48 89 78 20"
 # then the holder check, its thunk and the sweep's call, then the teleport
 # handler and its two callers.
 BUILDS = {
+    "1.0.0.2976": dict(
+        catch_update=0x20AD400,
+        releases=[
+            ("keepcatch",          0x2329184, "74 22", 0x2329164, TELEPORT_GUARD, 0x23291A3, 0x5B25468, 0x2329130, None),
+            ("keepcatch_client",   0x9857044, "74 22", 0x9857024, TELEPORT_GUARD, 0x9857063, 0x55B5460, 0x860FF0, 0x9856FF0),
+            ("keepcatch_state",    0x156F1CD, "74 20", 0x156F1AB, TELEPORT_GUARD, 0x156F1EA, None, None, None),
+            ("keepcatch_watchdog", 0x20AE628, "85 FF", 0x20AE628, WATCHDOG_GUARD, 0x20AE669, None, None, None),
+        ],
+        holder=0xDD9D1E0, thunk=0x1F53D50, sweep=0x28181E0,
+        teleport=0x2BC96C0, calls=(0x2BCA5DD, 0x2BCAB80),
+    ),
     "1.0.0.2949": dict(
         catch_update=0x20AD3B0,
         releases=[

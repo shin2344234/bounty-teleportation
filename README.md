@@ -2,9 +2,9 @@
 
 Fast travel while carrying a bounty target in Crimson Desert. He rides along
 on your back and is still worth turning in at the other end. Works on 2.03.00
-exe 1.0.0.2944 and on the 1.0.0.2949 patch. 1.0.0 was tested in game; 1.0.1
-and 1.0.2 went out untested, so reports with the log attached are what shows
-whether they work.
+exe 1.0.0.2944 and on the 1.0.0.2949 and 1.0.0.2976 patches. 1.0.3 was
+played on 1.0.0.2976 before release, with an outlaw carried through a map
+teleport and set down at the other end. 1.0.1 and 1.0.2 went out untested.
 
 Without it the teleport goes through and the outlaw does not. Two separate
 things remove him during the confirm: the teleport releases the catch, and
@@ -39,16 +39,20 @@ fix to the log, the memory reads or the hook engine lands in both plugins.
 Six addresses, each checked against the bytes that should be there before
 anything is written, and all of it put back if the plugin is unloaded. A game
 update moves them, as the 21 September 2026 patch to exe 1.0.0.2949 moved
-every one. The plugin holds a table per game build and uses the one whose
-addresses all check out; matching none, it writes nothing and names the
-closest build's failed check in its log.
+every one and the 23 September patch to 1.0.0.2976 moved them again. The
+plugin holds a table per game build and uses the one whose addresses all check
+out. Matching none, it writes nothing and names the newest build's failed
+check in its log.
 
-`research\derive_2949.py` and `derive_2949b.py` are how the second table was
-found, each address from a byte pattern or from a reference to something
-already found rather than an offset against the old build. They are the
-starting point for the next patch. `find_2949.py` was the first pass over the
-patched executable and only counts pattern hits; the derive scripts replaced
-it.
+`research\derive_2949.py` finds each address from a byte pattern or from a
+reference to something already found, never from an offset against the old
+build, and it found both later tables unchanged. `derive_2949b.py` confirmed
+the 2949 table by its vtables and thunk, which had not moved. On 2976 they had,
+so `derive_2976b.py` reads the class name behind each vtable instead and picks
+the sweep's call out of the holder thunk's eleven callers by its offset inside
+its function. Those scripts are the starting point for the next patch.
+`find_2949.py` was the first pass over the 2949 executable and only counts
+pattern hits.
 
 The four catch releases are only written during a teleport carry. 1.0.0 wrote
 them for the whole session, and they turned out to be how the game also ends
@@ -78,16 +82,13 @@ them, which is the test to run first if an update breaks the mod.
 
 ## Antivirus
 
-VirusTotal counts 1.0.2's archives at 0/68 for the DMM one and 0/55 for the
-manual one, and 1.0.2's loose plugin at 1/70. The one is Microsoft, returning
+VirusTotal counts 1.0.3's loose plugin at 0/71, its DMM archive at 0/68 and
+its manual archive at 0/66. The plugin read 0/70 for 1.0.0 and 0/71 for
+1.0.1. 1.0.2's read 1/70, the one being Microsoft's
 Trojan:Win32/Wacatac.B!ml, the label it gives a file its model dislikes rather
-than one it recognises. Three other readings of the same day disagree with it.
-Desktop Defender finds nothing in that file on engine 1.1.26080.3 with the
-22 September 2026 definitions. Microsoft's engine passed the plugin when it
-scanned it inside both archives. And 1.0.1's plugin, resubmitted the same
-afternoon, still came back 0/68 with Microsoft among the engines that cleared
-it, though it differs from 1.0.2 only in the second build table and the code
-that picks between them.
+than one it recognises. Desktop Defender found nothing in that file, and
+Microsoft passed the same plugin inside both 1.0.2 archives. 1.0.3 differs
+from it by one more build table, and Microsoft clears it.
 
 The plugin imports kernel32 and nothing else, reads and writes no registry key
 and no game file, and is signed under Microsoft's identity-verified chain as
