@@ -1,38 +1,33 @@
 <#
 .SYNOPSIS
-    Publish the current release to the Bounty Teleportation mod page.
+    Publish the current release to both file entries on the mod's Nexus page.
 
 .DESCRIPTION
-    A wrapper around Publish-NexusModUpdate.ps1 that fills in the three things
-    that never change and the two that follow from the version, so a release
-    does not depend on remembering an id.
+    Synced from release-kit. Do not edit it here; the next sync overwrites it.
 
-        Mod id  38521561681384   the v3 id, not the 3560 in the page URL
-        File id 8001705          the active "BountyTeleportation 1.0.0 DMM" entry
+    A wrapper around Publish-NexusModUpdate.ps1. The ids come from the nexus
+    block in release.json, and the archives and changelog follow from the
+    version, so a release does not depend on remembering an id. Check the ids
+    against the live page with nexus-ids.py.
 
-    Both were read back with nexus-ids.py on 20 September 2026, once page 3560
-    was up and 1.0.0 had been uploaded by hand, and they are stable for the
-    life of the page. This wrapper is for the releases after 1.0.0. Running it
-    for a version already listed would post the changelog a second time, and
-    the check below refuses that.
+    One run updates both entries:
+      1. the DMM entry (dmmFileId) with <fileBase>-<version>-DMM.zip, as the
+         primary mod-manager download, carrying the changelog and setting the
+         page version
+      2. the manual entry (manualFileId) with <fileBase>-<version>.zip, with no
+         changelog, since the first upload already posted it
 
-    The file id is the one worth being careful about. Point a release at the
-    wrong one and it attaches as a version of some other file.
+    The changelog endpoint appends rather than replaces, so publishing one
+    version twice posts the text twice. Before sending, this asks the API what
+    each entry already lists and skips an entry that already has the version.
+    That also makes a second run safe after the first one failed half way.
 
-    The version comes from mod/src/version.h, and the archive and changelog are
-    derived from it, so this only ever publishes what package.ps1 built.
+    The previous version is left listed, never archived. Nexus demotes it to
+    old_version on its own once the new one goes up, and an old_version file
+    keeps its download button. Nothing needs moving by hand. -ArchivePrevious
+    pulls a build outright, which is the thing Seth does not want.
 
-    Report only unless you pass -Apply, same as the script it wraps.
-
-    The previous version is left listed, never archived. Archiving hides it,
-    and people who need an older build (kfen72 asked, 9 September 2026) then
-    have nothing to download. Nothing has to be done by hand for that: Nexus
-    demotes the previous file to old_version on its own once the new one goes
-    up as primary, and an old_version file keeps its download button and only
-    loses the headline slot. Confirmed against Master Looter page 3402, where
-    1.6.32 and every build before it read old_version and all download.
-    -ArchivePrevious is the opt-in for pulling a build outright, which is the
-    thing Seth does not want.
+    Report only unless you pass -Apply.
 
 .EXAMPLE
     .\publish-nexus.ps1
@@ -43,119 +38,103 @@ param(
     # Nothing is sent to Nexus without this.
     [switch] $Apply,
 
-    # Override the version read from version.h.
+    # Override the version read from the header.
     [string] $Version,
 
-    # Archive the previous version. Off by default and meant to stay off:
-    # archiving hides a build, and older ones are kept downloadable on purpose.
-    # Nexus demotes the previous file to old_version by itself, so nothing is
-    # owed here.
+    # Archive the previous version. Off by default and meant to stay off.
     [switch] $ArchivePrevious
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ReleaseConfig.ps1')
+$cfg = Get-ReleaseConfig -Version $Version
+$Version = $cfg.Version
+$nx = $cfg.Data.nexus
 
-$here = $PSScriptRoot
-$mod  = Split-Path $here -Parent
-$repo = Split-Path $mod -Parent
-
-if ([string]::IsNullOrWhiteSpace($Version)) {
-    $header = Join-Path $mod 'src\version.h'
-    $match  = Select-String -LiteralPath $header -Pattern '#define\s+BT_VERSION\s+"([^"]+)"'
-    if (-not $match) { throw "No BT_VERSION in $header" }
-    $Version = $match.Matches[0].Groups[1].Value
-}
-
-$archive   = Join-Path $mod  ("dist\BountyTeleportation-{0}-DMM.zip" -f $Version)
-$changelog = Join-Path $repo ("private\nexus\nexus-changelog-{0}.txt" -f $Version)
-
-if (-not (Test-Path -LiteralPath $archive)) {
-    throw "No archive at $archive. Run package.ps1 first."
-}
-if (-not (Test-Path -LiteralPath $changelog)) {
-    throw "No changelog at $changelog. Write it before publishing."
-}
-
-Write-Host ("Version $Version, from version.h") -ForegroundColor Cyan
-
-# The changelog endpoint appends rather than replaces, so a second run for one
-# version posts the text twice. Check what is already up there and refuse
-# rather than leave a duplicated page to clean up by hand.
-# The two ids from nexus-ids.py, in one place. They were written out twice,
-# once in the duplicate check and once in the arguments, which is one edit away
-# from a release attaching itself to the wrong file entry.
-#
-# Read back from the API on 20 September 2026, once page 3560 was published and
-# 1.0.0 was uploaded by hand. They are stable for the life of the page. Get
-# them wrong and a release publishes onto somebody else's page, which is how a
-# Glint Spotter announcement reached the Flight Freedom page on 14 September
-# 2026. Re-read them with nexus-ids.py if the page is ever restructured.
-#
-# 8001708 is the other entry, the manual archive. This wrapper does not touch
-# it; that one goes through Publish-NexusModUpdate.ps1 with -FileId directly,
-# and publishing the wrapper alone leaves the main download a version behind.
-$ids = @{
-    FileId = '8001705'          # the active "BountyTeleportation 1.0.0 DMM" entry
-    ModId  = '38521561681384'   # the v3 mod id, not the 3560 in the page URL
-}
-foreach ($pair in $ids.GetEnumerator()) {
-    if ($pair.Value -eq 'SET-ME') {
-        throw ("{0} is not set in publish-nexus.ps1. The Bounty Teleportation page has to exist and 1.0.0 " +
-               "has to be uploaded by hand before anything here can publish. Run nexus-ids.py once it " +
-               "does and paste the ids in." -f $pair.Key)
+foreach ($k in @('modId', 'dmmFileId', 'manualFileId')) {
+    if (-not $nx -or [string]::IsNullOrWhiteSpace([string] $nx.$k)) {
+        throw (("nexus.{0} is not set in release.json. The v3 API cannot create a file entry, so it " +
+                "has to exist first: on the page's Files tab, add a new file and upload this release's " +
+                "{1} archive by hand. Then run nexus-ids.py, copy the new id into release.json, and run " +
+                "this again. It will skip that entry as already listed and publish the other.") -f $k,
+               $(if ($k -eq 'manualFileId') { 'manual' } else { 'DMM' }))
     }
 }
+foreach ($f in @($cfg.ZipDmm, $cfg.ZipManual)) {
+    if (-not (Test-Path -LiteralPath $f)) { throw "No archive at $f. Run package.ps1 first." }
+}
+if (-not (Test-Path -LiteralPath $cfg.Changelog)) { throw "No changelog at $($cfg.Changelog). Write it before publishing." }
+if ((Get-Content -LiteralPath $cfg.Changelog -Raw) -match '\{\{[A-Z_]+\}\}') {
+    throw "$($cfg.Changelog) still has a {{PLACEHOLDER}}. Run release-docs.py stamp."
+}
 
-if ($Apply) {
-    $key = $env:NEXUS_API_KEY
-    if ([string]::IsNullOrWhiteSpace($key)) {
-        $keyFile = Join-Path $here 'keys.local.env'
-        if (Test-Path -LiteralPath $keyFile) {
-            foreach ($line in Get-Content -LiteralPath $keyFile) {
-                $t = $line.Trim()
-                if ($t -match '^\s*(#|$)') { continue }
-                $n, $v = $t -split '=', 2
-                if ($n.Trim() -eq 'NEXUS_API_KEY') { $key = $v.Trim().Trim('"').Trim("'"); break }
-            }
+Write-Host ("{0} {1}, page {2}" -f $cfg.Name, $Version, $nx.page) -ForegroundColor Cyan
+
+$entries = @(
+    [pscustomobject] @{
+        Label = 'DMM'; FileId = [string] $nx.dmmFileId; Archive = $cfg.ZipDmm
+        DisplayName = ('{0} {1} DMM' -f $cfg.FileBase, $Version); Changelog = $true
+    },
+    [pscustomobject] @{
+        Label = 'manual'; FileId = [string] $nx.manualFileId; Archive = $cfg.ZipManual
+        DisplayName = ('{0} {1} manual' -f $cfg.FileBase, $Version); Changelog = $false
+    }
+)
+
+# What is already up there, per entry.
+$key = Read-ReleaseKey -Name 'NEXUS_API_KEY'
+foreach ($e in $entries) {
+    $e | Add-Member -NotePropertyName Already -NotePropertyValue $null
+    if ([string]::IsNullOrWhiteSpace($key)) { continue }
+    try {
+        $existing = Invoke-RestMethod -Uri "https://api.nexusmods.com/v3/mod-files/$($e.FileId)/versions" `
+                                      -Headers @{ 'apikey' = $key } -Method Get
+        $hit = $existing.data.versions | Where-Object { $_.version -eq $Version } | Select-Object -First 1
+        if ($hit) { $e.Already = $hit.uploaded_at }
+    } catch {
+        if ($Apply) {
+            throw (("Could not read what file {0} already lists ({1}). Nothing was sent, because " +
+                    "sending blind can post the changelog twice.") -f $e.FileId, $_.Exception.Message)
         }
-    }
-    if (-not [string]::IsNullOrWhiteSpace($key)) {
-        try {
-            $existing = Invoke-RestMethod -Uri "https://api.nexusmods.com/v3/mod-files/$($ids.FileId)/versions" `
-                                          -Headers @{ 'apikey' = $key } -Method Get
-            $already = $existing.data.versions | Where-Object { $_.version -eq $Version }
-            if ($already) {
-                Write-Host ""
-                Write-Host ("Version {0} is already on the mod page, uploaded {1}." -f $Version, $already[0].uploaded_at) -ForegroundColor Red
-                Write-Host "Publishing it again would list a second copy and post the changelog twice." -ForegroundColor Red
-                Write-Host "Nothing was sent. Bump version.h and rebuild, or pass -Version for a different one." -ForegroundColor Red
-                exit 1
-            }
-        } catch {
-            Write-Warning ("Could not check what is already published ({0}); continuing." -f $_.Exception.Message)
-        }
+        Write-Warning ("Could not read what file {0} already lists: {1}" -f $e.FileId, $_.Exception.Message)
     }
 }
-
-$args = @{
-    FilePath                  = $archive
-    FileId                    = $ids.FileId
-    ModId                     = $ids.ModId
-    Version                   = $Version
-    DisplayName               = ("BountyTeleportation {0} DMM" -f $Version)
-    ChangelogPath             = $changelog
-    Category                  = 'main'
-    UpdateModVersion          = $true
-    PrimaryModManagerDownload = $true
+if ($Apply -and [string]::IsNullOrWhiteSpace($key)) {
+    throw "No NEXUS_API_KEY in the environment or keys.local.env beside this script."
 }
-if ($ArchivePrevious) { $args['ArchiveExistingFile'] = $true }
-if ($Apply)             { $args['Apply']               = $true }
 
-& (Join-Path $here 'Publish-NexusModUpdate.ps1') @args
-
-if ($Apply) {
+# The changelog rides on the DMM upload. If the DMM entry already has this
+# version, its changelog is already posted, so the manual one must not post it.
+foreach ($e in $entries) {
     Write-Host ""
-    Write-Host "Still manual, because the v3 API has no endpoint for either:" -ForegroundColor Yellow
-    Write-Host "  the page description  -> private\nexus\nexus-description.bbcode"
-    Write-Host ("  the update post       -> private\nexus\nexus-post-{0}.bbcode" -f $Version)
+    if ($e.Already) {
+        Write-Host ("{0} entry {1} already lists {2} (uploaded {3}). Skipped." -f $e.Label, $e.FileId, $Version, $e.Already) -ForegroundColor Yellow
+        continue
+    }
+    Write-Host ("{0} entry {1}: {2}" -f $e.Label, $e.FileId, (Split-Path $e.Archive -Leaf)) -ForegroundColor Cyan
+    $call = @{
+        FilePath    = $e.Archive
+        FileId      = $e.FileId
+        ModId       = [string] $nx.modId
+        Version     = $Version
+        DisplayName = $e.DisplayName
+        Category    = 'main'
+    }
+    if ($e.Changelog) {
+        $call['ChangelogPath']             = $cfg.Changelog
+        $call['UpdateModVersion']          = $true
+        $call['PrimaryModManagerDownload'] = $true
+    }
+    if ($ArchivePrevious) { $call['ArchiveExistingFile'] = $true }
+    if ($Apply)           { $call['Apply']               = $true }
+    & (Join-Path $PSScriptRoot 'Publish-NexusModUpdate.ps1') @call
 }
+
+Write-Host ""
+if ($Apply) {
+    Write-Host "Still by hand, because the v3 API has no endpoint for either:" -ForegroundColor Yellow
+} else {
+    Write-Host "REPORT ONLY. Nothing was sent. After -Apply, these stay by hand:" -ForegroundColor Yellow
+}
+Write-Host ("  paste the page description   private\nexus\nexus-description.bbcode")
+Write-Host ("  post the update              private\nexus\nexus-post-{0}.bbcode" -f $Version)

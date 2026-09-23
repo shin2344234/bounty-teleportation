@@ -32,7 +32,9 @@ HDE64 length decoder, which is all the hook installer uses it for. Five of the
 plugin's source files are compiled out of `mod\src` rather than copied, so a
 fix to the log, the memory reads or the hook engine lands in both plugins.
 
-`carry\package.ps1` builds the two archives and prints their checksums.
+`carry\scripts\sign.ps1` signs the plugin and `carry\scripts\package.ps1` then
+checks the six addresses against the game, builds the two archives and prints
+their checksums.
 
 ## What it patches
 

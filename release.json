@@ -1,0 +1,43 @@
+{
+  "name": "Bounty Teleportation",
+  "fileBase": "BountyTeleportation",
+  "version": {
+    "header": "carry/src/version.h",
+    "macro": "BT_VERSION"
+  },
+  "scriptsDir": "carry/scripts",
+  "dist": "carry/dist",
+  "sources": [
+    "carry/src",
+    "mod/src",
+    "carry/BountyTeleportation.ini",
+    "carry/CMakeLists.txt"
+  ],
+  "manualZip": [
+    "carry/README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "gates": [
+    {
+      "name": "the six addresses match the game",
+      "run": "py -3 research\\verify_carry.py"
+    }
+  ],
+  "evergreen": [
+    "private/nexus/nexus-description.bbcode",
+    "README.md"
+  ],
+  "github": "shin2344234/bounty-teleportation",
+  "nexus": {
+    "game": "crimsondesert",
+    "page": "3560",
+    "modId": "38521561681384",
+    "dmmFileId": "8001705",
+    "manualFileId": "8001708"
+  },
+  "discord": {
+    "channel": "1547305058922668072"
+  },
+  "requires": []
+}
