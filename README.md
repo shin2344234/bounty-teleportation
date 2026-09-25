@@ -33,12 +33,12 @@ plugin's source files are compiled out of `mod\src` rather than copied, so a
 fix to the log, the memory reads or the hook engine lands in both plugins.
 
 `carry\scripts\sign.ps1` signs the plugin and `carry\scripts\package.ps1` then
-checks the six addresses against the game, builds the two archives and prints
+checks the seven addresses against the game, builds the two archives and prints
 their checksums.
 
 ## What it patches
 
-Six addresses, each checked against the bytes that should be there before
+Seven addresses, each checked against the bytes that should be there before
 anything is written, and all of it put back if the plugin is unloaded. A game
 update moves them, as the 21 September 2026 patch to exe 1.0.0.2949 moved
 every one and the 23 September patch to 1.0.0.2976 moved them again. The
@@ -79,7 +79,14 @@ The departure sweep asks whether anyone else holds an actor through a thunk at
 `+0x1F53D10` into `+0xE1478D0`, and on no it removes it. The plugin hooks that
 check and answers yes for an actor whose catch component names a carrier.
 
-`research\verify_carry.py` reads all six out of the executable and checks
+The seventh is `catch_update` itself, hooked only to read. Every call on a
+catch that is holding or carried something is remembered with the address it
+returns to, and the log lists the recent ones when a carry ends and when a map
+teleport starts with nothing held. On 24 September 2026 two players found
+the KLIFF TELEPORT patch of Even Faster Vanilla Animations Trimmer leaving the
+bounty behind, and no log could say which release had let go.
+
+`research\verify_carry.py` reads all seven out of the executable and checks
 them, which is the test to run first if an update breaks the mod.
 
 ## Antivirus

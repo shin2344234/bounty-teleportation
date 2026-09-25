@@ -78,6 +78,14 @@ namespace
 
     constexpr int kReleaseCount = 4;
 
+    // A catch_update call the plugin does not patch, named only so the log
+    // can say which one ran. Nothing is written at these.
+    struct OtherRelease
+    {
+        const char* label;
+        uintptr_t   call;
+    };
+
     struct Build
     {
         const char* name;          // the exe version it was read off
@@ -89,6 +97,7 @@ namespace
         uintptr_t   teleport;      // the map teleport handler
         uintptr_t   teleportCall1; // its two callers, both in the message handler
         uintptr_t   teleportCall2;
+        OtherRelease others[2];    // zero where they were never derived
     };
 
     // The releases, in order: slot 0x200 of the server and common
@@ -117,6 +126,7 @@ namespace
             },
             0xDD9D1E0, 0x1F53D50, 0x28181E0,
             0x2BC96C0, 0x2BCA5DD, 0x2BCAB80,
+            { { "the release in +0x156F550", 0x156F9F5 }, { "the release in +0x20C0610", 0x20C07C6 } },
         },
         {
             "1.0.0.2949", 0x20AD3B0,
@@ -330,6 +340,132 @@ namespace
     int                 g_endStrikes = 0;
     long                g_arms = 0;
 
+    // ---- which release let go ---------------------------------------------
+    //
+    // Two players on 24 September 2026 found that the KLIFF TELEPORT patch of
+    // Even Faster Vanilla Animations Trimmer leaves the bounty behind, untied,
+    // and no log could say why: a teleport that starts with nothing held
+    // wrote nothing, and a disarm said only that the carry had ended. So every
+    // catch_update on a catch that is live when it is called is remembered
+    // with where it was called from, and the recent ones go into the log at
+    // two moments. A map teleport that starts with nothing held lists the last
+    // fifteen seconds, which names whatever let go before the teleport
+    // handler ran. A disarm lists everything since the teleport armed, which
+    // names a release that ran while the four were written. The hook only
+    // reads; nothing in the game is changed by it.
+    //
+    // catch_update takes the component in rcx, an out pointer in rdx, a force
+    // byte in r8b, a float in xmm3 and the reason as a byte on the stack: 9
+    // from the teleport releases, 1 from the watchdog, 0xC from the one in
+    // +0x20C0610. The fourth parameter is declared float so xmm3 reaches the
+    // original intact, and three more stack slots are passed through as the
+    // teleport detour does.
+    struct Seen
+    {
+        ULONGLONG first, last;
+        uintptr_t comp;
+        uintptr_t from;       // return address, as an rva
+        uint32_t  held, carrier;
+        uint8_t   reason;
+        uint32_t  repeats;
+    };
+    constexpr int       kSeen       = 32;
+    constexpr ULONGLONG kLookBackMs = 15000;
+    Seen    g_seen[kSeen] = {};
+    int     g_seenNext = 0;
+    SRWLOCK g_seenLock = SRWLOCK_INIT;
+
+    using CatchUpdateFn = uint64_t (*)(uint64_t, uint64_t, uint64_t, float, uint64_t, uint64_t, uint64_t, uint64_t);
+    CatchUpdateFn g_catchUpdateOrig = nullptr;
+
+    void Remember(uintptr_t comp, uintptr_t from, uint32_t held, uint32_t carrier, uint8_t reason)
+    {
+        const ULONGLONG now = GetTickCount64();
+        AcquireSRWLockExclusive(&g_seenLock);
+        Seen& prev = g_seen[(g_seenNext + kSeen - 1) % kSeen];
+        if (prev.first && prev.comp == comp && prev.from == from && prev.held == held && prev.carrier == carrier)
+        {
+            prev.last = now;
+            ++prev.repeats;
+        }
+        else
+        {
+            g_seen[g_seenNext] = { now, now, comp, from, held, carrier, reason, 0 };
+            g_seenNext = (g_seenNext + 1) % kSeen;
+        }
+        ReleaseSRWLockExclusive(&g_seenLock);
+    }
+
+    uint64_t CatchUpdateDetour(uint64_t comp, uint64_t out, uint64_t force, float f,
+                               uint64_t reason, uint64_t g, uint64_t h, uint64_t i)
+    {
+        const uintptr_t c = static_cast<uintptr_t>(comp);
+        uint32_t held = 0, carrier = 0;
+        bp::mem::Read32(c + 0x38, &held);
+        bp::mem::Read32(c + 0x28, &carrier);
+        if (held || carrier)
+            Remember(c, bp::mem::Rva(reinterpret_cast<uintptr_t>(_ReturnAddress())), held, carrier,
+                     static_cast<uint8_t>(reason));
+        return g_catchUpdateOrig(comp, out, force, f, reason, g, h, i);
+    }
+
+    const char* ReleaseName(uintptr_t from)
+    {
+        if (!g_build) return nullptr;
+        for (const Release& r : g_build->releases)
+            if (r.call + 5 == from) return r.label;
+        for (const OtherRelease& o : g_build->others)
+            if (o.call && o.call + 5 == from) return o.label;
+        return nullptr;
+    }
+
+    // Copies the ring under the lock and logs outside it, so a catch_update
+    // on a game thread never waits behind the log.
+    void ListReleases(ULONGLONG since, const char* span)
+    {
+        Seen copy[kSeen];
+        AcquireSRWLockShared(&g_seenLock);
+        memcpy(copy, g_seen, sizeof copy);
+        const int next = g_seenNext;
+        ReleaseSRWLockShared(&g_seenLock);
+
+        const ULONGLONG now = GetTickCount64();
+        int listed = 0;
+        for (int k = 0; k < kSeen; ++k)
+        {
+            const Seen& e = copy[(next + k) % kSeen];
+            if (!e.first || e.last < since) continue;
+            ++listed;
+            const char* cls = bp::mem::RttiShort(e.comp);
+            const char* name = ReleaseName(e.from);
+            LOG("[release] %llu ms ago: catch_update on %s 0x%llX, holding 0x%08X, carried by 0x%08X, reason %u, "
+                "returning to +0x%llX%s%s%s", static_cast<unsigned long long>(now - e.first), cls ? cls : "?",
+                static_cast<unsigned long long>(e.comp), e.held, e.carrier, e.reason,
+                static_cast<unsigned long long>(e.from), name ? " (" : "", name ? name : "", name ? ")" : "");
+            if (e.repeats)
+                LOG("[release]   and %u more times from there, the last %llu ms ago", e.repeats,
+                    static_cast<unsigned long long>(now - e.last));
+        }
+        if (!listed) LOG("[release] no catch that was holding or carried anything went through catch_update %s", span);
+        else LOG("[release] that is every live catch that went through catch_update %s", span);
+    }
+
+    bool HookCatchUpdate()
+    {
+        const uintptr_t target = bp::mem::Game().base + g_build->catchUpdate;
+        char why[160] = "";
+        if (!bp::farhook::Install("catch_update", target, reinterpret_cast<void*>(&CatchUpdateDetour),
+                                  reinterpret_cast<void**>(&g_catchUpdateOrig), why, sizeof why))
+        {
+            LOG_ERR("[release] could not hook catch_update at +0x%llX: %s. The carry still works; the log just "
+                    "cannot say which release let go", static_cast<unsigned long long>(g_build->catchUpdate), why);
+            return false;
+        }
+        LOG_OK("[release] hooked catch_update at +0x%llX to note which release lets go of a carry",
+               static_cast<unsigned long long>(g_build->catchUpdate));
+        return true;
+    }
+
     bool CatchComponent(uintptr_t actor, uintptr_t* out)
     {
         uintptr_t table = 0, catchc = 0;
@@ -386,10 +522,12 @@ namespace
         g_keptCatch.store(0);
         g_playerCatch = 0;
         g_endStrikes = 0;
-        const ULONGLONG held = GetTickCount64() - g_armedAt;
+        const ULONGLONG armedAt = g_armedAt;
+        const ULONGLONG held = GetTickCount64() - armedAt;
         ReleaseSRWLockExclusive(&g_armLock);
         LOG("[teleport] the releases are back to the game's own after %llu seconds: %s",
             static_cast<unsigned long long>(held / 1000), why);
+        ListReleases(armedAt, "since the teleport armed");
     }
 
     // The mod thread's side, ten times a second while armed.
@@ -424,8 +562,15 @@ namespace
     {
         uintptr_t catchc = 0;
         uint32_t held = 0;
-        if (CatchComponent(static_cast<uintptr_t>(actor), &catchc) && bp::mem::Read32(catchc + 0x38, &held) && held)
+        const bool found = CatchComponent(static_cast<uintptr_t>(actor), &catchc);
+        if (found && bp::mem::Read32(catchc + 0x38, &held) && held)
             Arm(catchc, held);
+        else
+        {
+            LOG("[teleport] a map teleport started with the player holding nothing%s, so nothing is armed",
+                found ? "" : " (no catch component on the actor it was given)");
+            ListReleases(GetTickCount64() - kLookBackMs, "in the 15 seconds before it");
+        }
         return g_teleportOrig(a, b, actor, d, e, f, g, h);
     }
 
@@ -522,7 +667,12 @@ namespace
         // know a teleport has started, and writing the releases for the whole
         // session is what 1.0.0 did and what broke petting.
         bool armable = false;
-        if (s.keepCatch) armable = RegisterKeepCatch() && HookTeleport();
+        if (s.keepCatch)
+        {
+            armable = RegisterKeepCatch() && HookTeleport();
+            // Only notes which release ran. The carry works without it.
+            if (armable) HookCatchUpdate();
+        }
         else LOG("[keepcatch] KeepCatch is 0, so a teleport releases the catch as it always has");
 
         if (s.keepCarried)

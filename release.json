@@ -20,7 +20,7 @@
   ],
   "gates": [
     {
-      "name": "the six addresses match the game",
+      "name": "the seven addresses match the game",
       "run": "py -3 research\\verify_carry.py"
     }
   ],

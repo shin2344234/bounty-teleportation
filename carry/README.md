@@ -47,14 +47,16 @@ Nothing can be fixed without it. `BountyTeleportation.log` is written beside
 the plugin in bin64 and is a few dozen lines, so attach the whole file. It
 says every time a teleport armed the four releases and every time they came
 back out, and if a problem happened with no teleport line near it, that shows
-this mod was not involved.
+this mod was not involved. When a carry ends, and when you teleport holding
+nothing, it also lists which of the game's releases let go of whatever was
+being carried, which is how a conflict with another mod gets pinned down.
 
 The log from the session before is `BountyTeleportation.01.log`, and older
 ones go up to `.24`, so if you have already restarted the game, attach the one
 from the session where it happened. Post it on the bugs tab or as a GitHub
 issue.
 
-Six addresses are written or hooked and each is checked against the bytes
+Seven addresses are written or hooked and each is checked against the bytes
 that should be there first. The plugin carries a set of them for each game
 build it knows, 1.0.0.2944, 1.0.0.2949 and 1.0.0.2976, and uses whichever
 the game matches. On a game update matching none of them it writes nothing,
@@ -78,7 +80,7 @@ archive it describes.
 
 A scanner may still flag `BountyTeleportation.asi` one day, because the shape
 of what it does looks like a trainer to a model: it is a DLL loaded into the
-game that writes jumps over four of the game's own functions and hooks two
+game that writes jumps over four of the game's own functions and hooks three
 more. It imports kernel32 and nothing else, so there is no network code and
 no window in it, and it reads and writes no registry key and no game file. It
 is code signed, and Properties, Digital Signatures shows Seth Walker under
