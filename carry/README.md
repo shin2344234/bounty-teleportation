@@ -10,11 +10,12 @@ In the unmodded game the teleport happens and he does not. You arrive alone.
 
 1. Ultimate ASI Loader in `bin64`, next to CrimsonDesert.exe. If it is named
    version.dll and nothing loads, rename it to winmm.dll.
-2. With the game closed, copy `BountyTeleportation.asi` and `BountyTeleportation.ini` into
-   bin64. If you only copy the plugin it writes the same ini itself the first
-   time you run it.
+2. With the game closed, copy `BountyTeleportation.asi` into bin64. The
+   first time the game starts with it, it writes `BountyTeleportation.ini`
+   beside itself with both settings on. An ini from an earlier version is
+   kept as it is.
 
-Uninstalling is deleting those files.
+Uninstalling is deleting the BountyTeleportation files from bin64.
 
 ## Settings
 
@@ -70,6 +71,15 @@ them again, and 1.0.2 stops the same way on it.
 Do not run this alongside Bounty Probe, the research plugin it came out of.
 They patch the same bytes and hook the same function, and the second one
 loaded refuses and says so.
+
+## Known conflict
+
+Even Faster Vanilla Animations Trimmer by kuiye123, part of Skip All Loading
+Scene, stops the bounty coming through. Its KLIFF TELEPORT category cuts the
+start and end of Kliff's teleport sequence to almost nothing, and with it
+on you arrive alone and the bounty is left behind, untied. Untick KLIFF
+TELEPORT in DMM and keep the rest of the trimmer. zx3691 found the conflict
+and hansdepaula narrowed it to that category.
 
 ## Antivirus
 

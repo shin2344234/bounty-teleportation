@@ -2,9 +2,9 @@
 
 Fast travel while carrying a bounty target in Crimson Desert. He rides along
 on your back and is still worth turning in at the other end. Works on 2.03.00
-exe 1.0.0.2944 and on the 1.0.0.2949 and 1.0.0.2976 patches. 1.0.3 was
-played on 1.0.0.2976 before release, with an outlaw carried through a map
-teleport and set down at the other end. 1.0.1 and 1.0.2 went out untested.
+exe 1.0.0.2944 and on the 1.0.0.2949 and 1.0.0.2976 patches. 1.0.3 and
+1.0.4 were played on 1.0.0.2976 before release, each with an outlaw carried
+through a map teleport. 1.0.1 and 1.0.2 went out untested.
 
 Without it the teleport goes through and the outlaw does not. Two separate
 things remove him during the confirm: the teleport releases the catch, and
@@ -88,6 +88,15 @@ bounty behind, and no log could say which release had let go.
 
 `research\verify_carry.py` reads all seven out of the executable and checks
 them, which is the test to run first if an update breaks the mod.
+
+## Known conflict
+
+Even Faster Vanilla Animations Trimmer by kuiye123, part of Skip All Loading
+Scene, stops the bounty coming through. Its KLIFF TELEPORT category cuts the
+start and end of Kliff's teleport sequence to almost nothing, and with it
+on you arrive alone and the bounty is left behind, untied. Untick KLIFF
+TELEPORT in DMM and keep the rest of the trimmer. zx3691 found the conflict
+and hansdepaula narrowed it to that category.
 
 ## Antivirus
 
