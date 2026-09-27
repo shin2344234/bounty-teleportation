@@ -22,6 +22,10 @@
     {
       "name": "the seven addresses match the game",
       "run": "py -3 research\\verify_carry.py"
+    },
+    {
+      "name": "the INI Master metadata matches ReadSettings",
+      "run": "py -3 scripts\\check_inimeta.py"
     }
   ],
   "evergreen": [

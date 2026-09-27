@@ -1,0 +1,6 @@
+// Settings help for INI Master, which reads this resource from the plugin's
+// bytes without loading it. The resource type must be INIMETA. This is the
+// same BountyTeleportation.ini the plugin embeds to write out on a first
+// run, with a ;@mod line and two ;@ restart flags added; the game skips
+// them like any other comment. Keep it in step with ReadSettings in mod.cpp.
+BT_INIMETA INIMETA "../BountyTeleportation.ini"

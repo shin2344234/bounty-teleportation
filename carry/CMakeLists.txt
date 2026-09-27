@@ -57,12 +57,19 @@ add_library(BountyTeleportation SHARED
     src/dllmain.cpp
     src/mod.cpp
     src/patch.cpp
+    src/resources.rc
     "${PROBE_SRC}/core/log.cpp"
     "${PROBE_SRC}/core/paths.cpp"
     "${PROBE_SRC}/game/mem.cpp"
     "${PROBE_SRC}/game/farhook.cpp"
     "${PROBE_SRC}/game/keepcarried.cpp"
 )
+
+# resources.rc pulls in BountyTeleportation.ini as the INIMETA resource, and
+# CMake does not otherwise know a .rc file depends on what it %includes, so
+# an ini edit with no code change would not trigger a rebuild without this.
+set_source_files_properties(src/resources.rc PROPERTIES OBJECT_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/BountyTeleportation.ini")
 
 target_include_directories(BountyTeleportation PRIVATE src "${PROBE_SRC}"
                            "${CMAKE_CURRENT_BINARY_DIR}/generated" ${minhook_SOURCE_DIR}/src/hde)
