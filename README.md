@@ -112,13 +112,13 @@ through.
 
 ## Antivirus
 
-VirusTotal counts 1.0.5's loose plugin at 0/71, its DMM archive at 0/68 and
-its manual archive at 0/67. The plugin read 0/70 for 1.0.0, 0/71 for 1.0.1,
-and 0/71 for both 1.0.3 and 1.0.4. 1.0.2's read 1/70, the one being Microsoft's
+VirusTotal counts 1.0.6's loose plugin at 0/71 and both its archives at 0/67.
+The plugin read 0/70 for 1.0.0, 0/71 for 1.0.1, and 0/71 for each of 1.0.3,
+1.0.4 and 1.0.5. 1.0.2's read 1/70, the one being Microsoft's
 Trojan:Win32/Wacatac.B!ml, the label it gives a file its model dislikes rather
 than one it recognises. Desktop Defender found nothing in that file, and
 Microsoft passed the same plugin inside both 1.0.2 archives. Every release
-since has been clean, 1.0.4 and 1.0.5 with a third hook in them.
+since has been clean, 1.0.4 to 1.0.6 with a third hook in them.
 
 The plugin imports kernel32 and nothing else, reads and writes no registry key
 and no game file, and is signed under Microsoft's identity-verified chain as
