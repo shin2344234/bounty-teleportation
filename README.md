@@ -5,7 +5,8 @@ on your back and is still worth turning in at the other end. Works on 2.03.00
 exe 1.0.0.2944 and on the 1.0.0.2949 and 1.0.0.2976 patches. 1.0.3 and
 1.0.4 were played on 1.0.0.2976 before release, each with an outlaw carried
 through a map teleport. 1.0.5 went out untested and a player confirmed it the
-same day. 1.0.1 and 1.0.2 went out untested.
+same day. The fix in 1.0.6 went to one player as a test build first, and they
+carried their bounty through with it. 1.0.1 and 1.0.2 went out untested.
 
 Without it the teleport goes through and the outlaw does not. Two separate
 things remove him during the confirm: the teleport releases the catch, and
@@ -101,6 +102,13 @@ zx3691 played 1.0.5 with KLIFF TELEPORT on the day it came out and the bounty
 came through, and their log shows the early hold taking effect 60 ms before the
 teleport handler. zx3691 found the conflict, hansdepaula narrowed it to that
 category, and zx3691's logs named the release and confirmed the fix.
+
+1.0.5 only started early when the client's state transition let go first.
+thatswedishdad's log on 27 September 2026 had the client's character control
+letting go 78 ms before the teleport handler instead, with no trimmer named,
+and the bounty stayed behind. 1.0.6 starts early from any of the three
+teleport releases. thatswedishdad ran it as a test build and the bounty came
+through.
 
 ## Antivirus
 

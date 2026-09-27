@@ -79,9 +79,15 @@ Scene, left the bounty behind up to 1.0.4. Its KLIFF TELEPORT category cuts
 the start and end of Kliff's teleport sequence to almost nothing, and the game
 then let go of the bounty about 60 ms before this mod started holding the
 carry. 1.0.5 starts holding at that earlier moment, so the trimmer can stay on.
-It went out without a play test. If the bounty is still left behind, untick
-KLIFF TELEPORT in DMM and send the log. zx3691 found the conflict, hansdepaula
-narrowed it to that category, and zx3691's log named the release.
+zx3691 played it with KLIFF TELEPORT on and the bounty came through. zx3691
+found the conflict, hansdepaula narrowed it to that category, and zx3691's
+logs named the release and confirmed the fix.
+
+A different part of the game can let go early too. thatswedishdad's log had
+the client's character control doing it, where 1.0.5 only watched the state
+transition. 1.0.6 starts holding early from either one, and from the server's
+character control as well, and thatswedishdad carried their bounty through
+with it. If the bounty is left behind on 1.0.6, send the log.
 
 ## Antivirus
 
