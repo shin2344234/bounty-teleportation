@@ -396,6 +396,22 @@ namespace
         ReleaseSRWLockExclusive(&g_seenLock);
     }
 
+    bool Arm(uintptr_t playerCatch, uint32_t held, bool early);
+
+    // The client state transition is the third release, and in the ordinary
+    // teleport it runs about a second after the teleport handler, when the
+    // four are already written and its patched jump skips the call. The
+    // KLIFF TELEPORT patch of Even Faster Vanilla Animations Trimmer cuts the
+    // start of Kliff's teleport sequence to one time piece, and then the
+    // transition runs first: zx3691's log on 26 September 2026 has it letting
+    // go of the client's catch 62 ms before the handler, the watchdog letting
+    // go of the server's 15 ms after that, and the handler finding nothing
+    // held. So a call from that transition on a catch that is holding
+    // someone arms the four right there and is skipped, which is what the
+    // written jump would have done. The code after the call clears a
+    // register and never reads what catch_update returns. If no teleport
+    // follows, the sweep keeps nobody and the carry check disarms after five
+    // seconds as it does for any teleport.
     uint64_t CatchUpdateDetour(uint64_t comp, uint64_t out, uint64_t force, float f,
                                uint64_t reason, uint64_t g, uint64_t h, uint64_t i)
     {
@@ -404,8 +420,12 @@ namespace
         bp::mem::Read32(c + 0x38, &held);
         bp::mem::Read32(c + 0x28, &carrier);
         if (held || carrier)
-            Remember(c, bp::mem::Rva(reinterpret_cast<uintptr_t>(_ReturnAddress())), held, carrier,
-                     static_cast<uint8_t>(reason));
+        {
+            const uintptr_t from = bp::mem::Rva(reinterpret_cast<uintptr_t>(_ReturnAddress()));
+            Remember(c, from, held, carrier, static_cast<uint8_t>(reason));
+            if (held && !g_armed.load() && g_build && from == g_build->releases[2].call + 5 && Arm(c, held, true))
+                return 0;
+        }
         return g_catchUpdateOrig(comp, out, force, f, reason, g, h, i);
     }
 
@@ -492,25 +512,44 @@ namespace
         return ok;
     }
 
-    void Arm(uintptr_t playerCatch, uint32_t held)
+    // `early` is the client state transition arming ahead of the handler;
+    // see CatchUpdateDetour.
+    bool                g_lastEarly = false;
+
+    bool Arm(uintptr_t playerCatch, uint32_t held, bool early)
     {
         AcquireSRWLockExclusive(&g_armLock);
         const bool was = g_armed.load();
+        const bool wasEarly = g_lastEarly;
         const bool ok = SetReleases(true);
         g_armed.store(ok);
         g_armedAt = GetTickCount64();
         g_playerCatch = playerCatch;
         g_endStrikes = 0;
+        g_lastEarly = early;
         if (!was) g_keptCatch.store(0);
         ++g_arms;
         const long n = g_arms;
         ReleaseSRWLockExclusive(&g_armLock);
-        if (ok)
+        if (early)
+        {
+            if (ok)
+                LOG("[teleport] %ld: the client's state transition went to let go of 0x%08X before any teleport "
+                    "handler ran, which a shortened teleport sequence does, so the four releases are written now "
+                    "and that one is skipped", n, held);
+            else
+                LOG_ERR("[teleport] %ld: the client's state transition went to let go of 0x%08X early, but the "
+                        "releases could not all be written; the game will release him as it always has", n, held);
+        }
+        else if (ok)
             LOG("[teleport] %ld: a map teleport started with the player holding 0x%08X, so the four releases are "
-                "written until that carry ends%s", n, held, was ? " (it was already armed from the last one)" : "");
+                "written until that carry ends%s", n, held,
+                !was ? "" : wasEarly ? " (armed a moment ago, when the client let go early)"
+                                     : " (it was already armed from the last one)");
         else
             LOG_ERR("[teleport] %ld: a map teleport started with the player holding 0x%08X, but the releases "
                     "could not all be written; the game will release him as it always has", n, held);
+        return ok;
     }
 
     void Disarm(const char* why)
@@ -564,7 +603,7 @@ namespace
         uint32_t held = 0;
         const bool found = CatchComponent(static_cast<uintptr_t>(actor), &catchc);
         if (found && bp::mem::Read32(catchc + 0x38, &held) && held)
-            Arm(catchc, held);
+            Arm(catchc, held, false);
         else
         {
             LOG("[teleport] a map teleport started with the player holding nothing%s, so nothing is armed",
