@@ -396,22 +396,26 @@ namespace
         ReleaseSRWLockExclusive(&g_seenLock);
     }
 
-    bool Arm(uintptr_t playerCatch, uint32_t held, bool early);
+    bool Arm(uintptr_t playerCatch, uint32_t held, const char* early);
 
-    // The client state transition is the third release, and in the ordinary
-    // teleport it runs about a second after the teleport handler, when the
-    // four are already written and its patched jump skips the call. The
-    // KLIFF TELEPORT patch of Even Faster Vanilla Animations Trimmer cuts the
-    // start of Kliff's teleport sequence to one time piece, and then the
-    // transition runs first: zx3691's log on 26 September 2026 has it letting
-    // go of the client's catch 62 ms before the handler, the watchdog letting
-    // go of the server's 15 ms after that, and the handler finding nothing
-    // held. So a call from that transition on a catch that is holding
+    // The first three releases are the teleport's own, reason 9, and in the
+    // ordinary teleport each runs after the teleport handler, when the four
+    // are already written and its patched jump skips the call. A shortened
+    // teleport can run one of them first. The KLIFF TELEPORT patch of Even
+    // Faster Vanilla Animations Trimmer cuts the start of Kliff's teleport
+    // sequence to one time piece, and zx3691's log on 26 September 2026 has
+    // the client state transition letting go of the client's catch 62 ms
+    // before the handler, the watchdog letting go of the server's 15 ms after
+    // that, and the handler finding nothing held. thatswedishdad's log on 27
+    // September has the client's character control doing the same 78 ms
+    // before it. So a call from any of the three on a catch that is holding
     // someone arms the four right there and is skipped, which is what the
-    // written jump would have done. The code after the call clears a
-    // register and never reads what catch_update returns. If no teleport
-    // follows, the sweep keeps nobody and the carry check disarms after five
-    // seconds as it does for any teleport.
+    // written jump would have done. The code after each call overwrites or
+    // clears the register and never reads what catch_update returns. The
+    // watchdog is left out: it runs on every catch several times a second,
+    // and an unarmed call from it is the game ending a carry as usual. If no
+    // teleport follows, the sweep keeps nobody and the carry check disarms
+    // after five seconds as it does for any teleport.
     uint64_t CatchUpdateDetour(uint64_t comp, uint64_t out, uint64_t force, float f,
                                uint64_t reason, uint64_t g, uint64_t h, uint64_t i)
     {
@@ -423,8 +427,13 @@ namespace
         {
             const uintptr_t from = bp::mem::Rva(reinterpret_cast<uintptr_t>(_ReturnAddress()));
             Remember(c, from, held, carrier, static_cast<uint8_t>(reason));
-            if (held && !g_armed.load() && g_build && from == g_build->releases[2].call + 5 && Arm(c, held, true))
-                return 0;
+            if (held && !g_armed.load() && g_build)
+                for (int r = 0; r < 3; ++r)
+                    if (from == g_build->releases[r].call + 5)
+                    {
+                        if (Arm(c, held, g_build->releases[r].label)) return 0;
+                        break;
+                    }
         }
         return g_catchUpdateOrig(comp, out, force, f, reason, g, h, i);
     }
@@ -512,11 +521,11 @@ namespace
         return ok;
     }
 
-    // `early` is the client state transition arming ahead of the handler;
-    // see CatchUpdateDetour.
+    // `early` names the release that armed ahead of the handler, or is null
+    // when the handler itself arms; see CatchUpdateDetour.
     bool                g_lastEarly = false;
 
-    bool Arm(uintptr_t playerCatch, uint32_t held, bool early)
+    bool Arm(uintptr_t playerCatch, uint32_t held, const char* early)
     {
         AcquireSRWLockExclusive(&g_armLock);
         const bool was = g_armed.load();
@@ -526,7 +535,7 @@ namespace
         g_armedAt = GetTickCount64();
         g_playerCatch = playerCatch;
         g_endStrikes = 0;
-        g_lastEarly = early;
+        g_lastEarly = early != nullptr;
         if (!was) g_keptCatch.store(0);
         ++g_arms;
         const long n = g_arms;
@@ -534,12 +543,12 @@ namespace
         if (early)
         {
             if (ok)
-                LOG("[teleport] %ld: the client's state transition went to let go of 0x%08X before any teleport "
-                    "handler ran, which a shortened teleport sequence does, so the four releases are written now "
-                    "and that one is skipped", n, held);
+                LOG("[teleport] %ld: %s went to let go of 0x%08X before any teleport handler ran, which a "
+                    "shortened teleport sequence does, so the four releases are written now and that one is "
+                    "skipped", n, early, held);
             else
-                LOG_ERR("[teleport] %ld: the client's state transition went to let go of 0x%08X early, but the "
-                        "releases could not all be written; the game will release him as it always has", n, held);
+                LOG_ERR("[teleport] %ld: %s went to let go of 0x%08X early, but the releases could not all be "
+                        "written; the game will release him as it always has", n, early, held);
         }
         else if (ok)
             LOG("[teleport] %ld: a map teleport started with the player holding 0x%08X, so the four releases are "
@@ -603,7 +612,7 @@ namespace
         uint32_t held = 0;
         const bool found = CatchComponent(static_cast<uintptr_t>(actor), &catchc);
         if (found && bp::mem::Read32(catchc + 0x38, &held) && held)
-            Arm(catchc, held, false);
+            Arm(catchc, held, nullptr);
         else
         {
             LOG("[teleport] a map teleport started with the player holding nothing%s, so nothing is armed",
