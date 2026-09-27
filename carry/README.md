@@ -75,11 +75,13 @@ loaded refuses and says so.
 ## Known conflict
 
 Even Faster Vanilla Animations Trimmer by kuiye123, part of Skip All Loading
-Scene, stops the bounty coming through. Its KLIFF TELEPORT category cuts the
-start and end of Kliff's teleport sequence to almost nothing, and with it
-on you arrive alone and the bounty is left behind, untied. Untick KLIFF
-TELEPORT in DMM and keep the rest of the trimmer. zx3691 found the conflict
-and hansdepaula narrowed it to that category.
+Scene, left the bounty behind up to 1.0.4. Its KLIFF TELEPORT category cuts
+the start and end of Kliff's teleport sequence to almost nothing, and the game
+then let go of the bounty about 60 ms before this mod started holding the
+carry. 1.0.5 starts holding at that earlier moment, so the trimmer can stay on.
+It went out without a play test. If the bounty is still left behind, untick
+KLIFF TELEPORT in DMM and send the log. zx3691 found the conflict, hansdepaula
+narrowed it to that category, and zx3691's log named the release.
 
 ## Antivirus
 
