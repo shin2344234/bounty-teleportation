@@ -1,6 +1,6 @@
 #pragma once
 
-#define BT_VERSION  "1.0.5"
+#define BT_VERSION  "1.0.6-test1"
 #define BT_NAME     "Bounty Teleportation"
 // Base name of the plugin's files next to it: BountyTeleportation.asi, .ini, .log.
 #define BT_FILEBASE L"BountyTeleportation"
