@@ -335,10 +335,58 @@ namespace
     SRWLOCK             g_armLock = SRWLOCK_INIT;
     std::atomic<bool>   g_armed{false};
     ULONGLONG           g_armedAt = 0;
-    uintptr_t           g_playerCatch = 0;
+    std::atomic<uintptr_t> g_playerCatch{0};    // read by the catch_update hook on game threads
     std::atomic<uintptr_t> g_keptCatch{0};
     int                 g_endStrikes = 0;
     long                g_arms = 0;
+
+    // Whose carry it is. An actor's own handle is the dword at +0x60, just
+    // before its component table at +0x68: Bounty Probe's object dumps of 20
+    // September 2026 have 0xA0100001 there on the player's actor 1,782 times
+    // and each NPC's own 0xB01xxxxx on theirs. 0xA0100001 is the
+    // player-tagged actor, the id Master Looter and Private Storage Master
+    // key on too. A component's actor is at its +8, which is how the game's
+    // own getter at +0x20ABA70 reaches it from a catch component.
+    //
+    // 1.0.5 and 1.0.6 never asked. gamniac's crash dump of 30 September 2026
+    // is a stack overflow on the game's main thread, 347,922 frames of
+    // +0x141A900, a function that numbers a graph by depth and never ends if
+    // the graph has a loop, with no frame of this plugin on the stack. Five
+    // players reported crashes on 1.0.6, four of them in quest cutscenes, and
+    // every one who tried turning the mod off says the crash went with it. In
+    // a cutscene an NPC lets go of someone through the same three releases,
+    // and 1.0.6 took that as the start of a teleport: it skipped the release,
+    // wrote all four for every catch in the game, and let the sweep keep any
+    // carried actor. A catch the scene meant to end stayed on. That is the
+    // likeliest way into the loop, though the dump cannot say which catch.
+    //
+    // The four byte patches had the same reach. Written, they skip a release
+    // for every catch in the game, NPCs' included, for as long as the carry
+    // lasts. Each patch jumps from its guard to the instruction after the
+    // catch_update call, and every block it jumps over only loads that call's
+    // arguments, so returning from the catch_update hook without calling
+    // through does the same thing for one catch and leaves every other catch
+    // alone. With the hook in, an armed carry skips a release only for the
+    // player's catch and for a catch whose carrier is the player. The patches
+    // are written only if the hook could not go in. The client keeps its own
+    // catch components, apart from the server's the handler arms on, and a
+    // client catch holding the same outlaw counts as the player's even if its
+    // actor's +0x60 should read differently from the server's.
+    constexpr uint32_t  kPlayerHandle = 0xA0100001;
+    constexpr ULONGLONG kEarlyMs      = 1000;
+    std::atomic<uint32_t> g_carrier{0};         // the handle a kept actor's carrier must be
+    std::atomic<uint32_t> g_held{0};            // the handle of whoever the player is carrying
+    std::atomic<bool>     g_earlyPending{false};
+    std::atomic<bool>     g_hookSkips{false};   // catch_update is hooked, so no patch is written
+    std::atomic<bool>     g_patched{false};     // this carry wrote the four patches instead
+
+    uint32_t OwnerHandle(uintptr_t comp)
+    {
+        uintptr_t actor = 0;
+        uint32_t handle = 0;
+        if (!bp::mem::ReadPtr(comp + 8, &actor) || !bp::mem::Read32(actor + 0x60, &handle)) return 0;
+        return handle;
+    }
 
     // ---- which release let go ---------------------------------------------
     //
@@ -366,7 +414,9 @@ namespace
         uintptr_t comp;
         uintptr_t from;       // return address, as an rva
         uint32_t  held, carrier;
+        uint32_t  owner;      // the handle of the actor the component belongs to
         uint8_t   reason;
+        bool      skipped;
         uint32_t  repeats;
     };
     constexpr int       kSeen       = 32;
@@ -378,25 +428,27 @@ namespace
     using CatchUpdateFn = uint64_t (*)(uint64_t, uint64_t, uint64_t, float, uint64_t, uint64_t, uint64_t, uint64_t);
     CatchUpdateFn g_catchUpdateOrig = nullptr;
 
-    void Remember(uintptr_t comp, uintptr_t from, uint32_t held, uint32_t carrier, uint8_t reason)
+    void Remember(uintptr_t comp, uintptr_t from, uint32_t held, uint32_t carrier, uint32_t owner, uint8_t reason,
+                  bool skipped)
     {
         const ULONGLONG now = GetTickCount64();
         AcquireSRWLockExclusive(&g_seenLock);
         Seen& prev = g_seen[(g_seenNext + kSeen - 1) % kSeen];
-        if (prev.first && prev.comp == comp && prev.from == from && prev.held == held && prev.carrier == carrier)
+        if (prev.first && prev.comp == comp && prev.from == from && prev.held == held && prev.carrier == carrier &&
+            prev.skipped == skipped)
         {
             prev.last = now;
             ++prev.repeats;
         }
         else
         {
-            g_seen[g_seenNext] = { now, now, comp, from, held, carrier, reason, 0 };
+            g_seen[g_seenNext] = { now, now, comp, from, held, carrier, owner, reason, skipped, 0 };
             g_seenNext = (g_seenNext + 1) % kSeen;
         }
         ReleaseSRWLockExclusive(&g_seenLock);
     }
 
-    bool Arm(uintptr_t playerCatch, uint32_t held, const char* early);
+    bool Arm(uintptr_t playerCatch, uint32_t held, uint32_t owner, const char* early);
 
     // The first three releases are the teleport's own, reason 9, and in the
     // ordinary teleport each runs after the teleport handler, when the four
@@ -413,9 +465,13 @@ namespace
     // written jump would have done. The code after each call overwrites or
     // clears the register and never reads what catch_update returns. The
     // watchdog is left out: it runs on every catch several times a second,
-    // and an unarmed call from it is the game ending a carry as usual. If no
-    // teleport follows, the sweep keeps nobody and the carry check disarms
-    // after five seconds as it does for any teleport.
+    // and an unarmed call from it is the game ending a carry as usual.
+    //
+    // Only the player's own catch counts. The three releases also end an
+    // NPC's catch in a cutscene, and 1.0.6 armed on those too (see
+    // kPlayerHandle). A call on any other actor's catch goes through to the
+    // game and is written to the log. If no teleport handler follows an early
+    // arm within a second, the carry check disarms.
     uint64_t CatchUpdateDetour(uint64_t comp, uint64_t out, uint64_t force, float f,
                                uint64_t reason, uint64_t g, uint64_t h, uint64_t i)
     {
@@ -426,14 +482,34 @@ namespace
         if (held || carrier)
         {
             const uintptr_t from = bp::mem::Rva(reinterpret_cast<uintptr_t>(_ReturnAddress()));
-            Remember(c, from, held, carrier, static_cast<uint8_t>(reason));
-            if (held && !g_armed.load() && g_build)
-                for (int r = 0; r < 3; ++r)
-                    if (from == g_build->releases[r].call + 5)
-                    {
-                        if (Arm(c, held, g_build->releases[r].label)) return 0;
-                        break;
-                    }
+            const uint32_t owner = OwnerHandle(c);
+            int rel = -1;
+            if (g_build)
+                for (int r = 0; r < kReleaseCount; ++r)
+                    if (from == g_build->releases[r].call + 5) { rel = r; break; }
+
+            if (rel >= 0 && g_armed.load() && !g_patched.load())
+            {
+                const uint32_t want = g_carrier.load();
+                const uint32_t mine = g_held.load();
+                const bool ours = c == g_playerCatch.load() || (want && (owner == want || carrier == want)) ||
+                                  (mine && held == mine);
+                Remember(c, from, held, carrier, owner, static_cast<uint8_t>(reason), ours);
+                if (ours) return 0;
+                return g_catchUpdateOrig(comp, out, force, f, reason, g, h, i);
+            }
+
+            bool skip = false;
+            if (rel >= 0 && rel < 3 && held && !g_armed.load())
+            {
+                if (owner != kPlayerHandle)
+                    LOG("[release] %s let go of 0x%08X for 0x%08X, which is not the player, so the game ends that "
+                        "catch as it always has", g_build->releases[rel].label, held, owner);
+                else
+                    skip = Arm(c, held, owner, g_build->releases[rel].label);
+            }
+            Remember(c, from, held, carrier, owner, static_cast<uint8_t>(reason), skip);
+            if (skip) return 0;
         }
         return g_catchUpdateOrig(comp, out, force, f, reason, g, h, i);
     }
@@ -467,10 +543,11 @@ namespace
             ++listed;
             const char* cls = bp::mem::RttiShort(e.comp);
             const char* name = ReleaseName(e.from);
-            LOG("[release] %llu ms ago: catch_update on %s 0x%llX, holding 0x%08X, carried by 0x%08X, reason %u, "
-                "returning to +0x%llX%s%s%s", static_cast<unsigned long long>(now - e.first), cls ? cls : "?",
-                static_cast<unsigned long long>(e.comp), e.held, e.carrier, e.reason,
-                static_cast<unsigned long long>(e.from), name ? " (" : "", name ? name : "", name ? ")" : "");
+            LOG("[release] %llu ms ago: catch_update on %s 0x%llX of 0x%08X, holding 0x%08X, carried by 0x%08X, "
+                "reason %u, returning to +0x%llX%s%s%s%s", static_cast<unsigned long long>(now - e.first),
+                cls ? cls : "?", static_cast<unsigned long long>(e.comp), e.owner, e.held, e.carrier, e.reason,
+                static_cast<unsigned long long>(e.from), name ? " (" : "", name ? name : "", name ? ")" : "",
+                e.skipped ? ", skipped by this mod" : "");
             if (e.repeats)
                 LOG("[release]   and %u more times from there, the last %llu ms ago", e.repeats,
                     static_cast<unsigned long long>(now - e.last));
@@ -525,17 +602,27 @@ namespace
     // when the handler itself arms; see CatchUpdateDetour.
     bool                g_lastEarly = false;
 
-    bool Arm(uintptr_t playerCatch, uint32_t held, const char* early)
+    // `owner` is the handle of the actor whose catch it is, and the sweep
+    // keeps only an actor that names it as carrier.
+    bool Arm(uintptr_t playerCatch, uint32_t held, uint32_t owner, const char* early)
     {
         AcquireSRWLockExclusive(&g_armLock);
         const bool was = g_armed.load();
         const bool wasEarly = g_lastEarly;
-        const bool ok = SetReleases(true);
+        // The hook skips per catch once it knows whose carry it is. Without
+        // the hook, or without the carrier's handle, the patches go in for
+        // every catch as they did up to 1.0.6.
+        const bool patch = !g_hookSkips.load() || !owner;
+        const bool ok = patch ? SetReleases(true) : true;
+        if (ok && patch) g_patched.store(true);
         g_armed.store(ok);
         g_armedAt = GetTickCount64();
-        g_playerCatch = playerCatch;
+        g_playerCatch.store(playerCatch);
         g_endStrikes = 0;
         g_lastEarly = early != nullptr;
+        g_earlyPending.store(early != nullptr);
+        g_carrier.store(owner);
+        g_held.store(held);
         if (!was) g_keptCatch.store(0);
         ++g_arms;
         const long n = g_arms;
@@ -544,20 +631,24 @@ namespace
         {
             if (ok)
                 LOG("[teleport] %ld: %s went to let go of 0x%08X before any teleport handler ran, which a "
-                    "shortened teleport sequence does, so the four releases are written now and that one is "
+                    "shortened teleport sequence does, so the player's carry is kept from here and that release is "
                     "skipped", n, early, held);
             else
                 LOG_ERR("[teleport] %ld: %s went to let go of 0x%08X early, but the releases could not all be "
                         "written; the game will release him as it always has", n, early, held);
         }
         else if (ok)
-            LOG("[teleport] %ld: a map teleport started with the player holding 0x%08X, so the four releases are "
-                "written until that carry ends%s", n, held,
+            LOG("[teleport] %ld: a map teleport started with 0x%08X holding 0x%08X, so %s until that carry "
+                "ends%s", n, owner, held,
+                patch ? "the four releases are written for every catch" : "the four releases skip that carry alone",
                 !was ? "" : wasEarly ? " (armed a moment ago, when the client let go early)"
                                      : " (it was already armed from the last one)");
         else
             LOG_ERR("[teleport] %ld: a map teleport started with the player holding 0x%08X, but the releases "
                     "could not all be written; the game will release him as it always has", n, held);
+        if (ok && !owner)
+            LOG_ERR("[teleport] %ld: the handle of the actor doing the carrying could not be read, so the releases "
+                    "are written for every catch and the sweep keeps any carried actor, as 1.0.6 did", n);
         return ok;
     }
 
@@ -565,10 +656,14 @@ namespace
     {
         AcquireSRWLockExclusive(&g_armLock);
         if (!g_armed.load()) { ReleaseSRWLockExclusive(&g_armLock); return; }
-        SetReleases(false);
+        if (g_patched.load()) SetReleases(false);
+        g_patched.store(false);
         g_armed.store(false);
         g_keptCatch.store(0);
-        g_playerCatch = 0;
+        g_earlyPending.store(false);
+        g_carrier.store(0);
+        g_held.store(0);
+        g_playerCatch.store(0);
         g_endStrikes = 0;
         const ULONGLONG armedAt = g_armedAt;
         const ULONGLONG held = GetTickCount64() - armedAt;
@@ -582,6 +677,11 @@ namespace
     void CheckCarry()
     {
         if (!g_armed.load()) return;
+        if (g_earlyPending.load() && GetTickCount64() - g_armedAt > kEarlyMs)
+        {
+            Disarm("a release let go of the player's catch early, but no map teleport followed within a second");
+            return;
+        }
         const uintptr_t kept = g_keptCatch.load();
         if (!kept)
         {
@@ -591,7 +691,8 @@ namespace
         }
         uint32_t carriedBy = 0, held = 0;
         const bool outlaw = StillCatch(kept) && bp::mem::Read32(kept + 0x28, &carriedBy) && carriedBy;
-        const bool player = StillCatch(g_playerCatch) && bp::mem::Read32(g_playerCatch + 0x38, &held) && held;
+        const uintptr_t mine = g_playerCatch.load();
+        const bool player = StillCatch(mine) && bp::mem::Read32(mine + 0x38, &held) && held;
         if (outlaw && player) { g_endStrikes = 0; return; }
         if (++g_endStrikes < kEndPolls) return;
         Disarm(!outlaw ? "the outlaw is no longer carried" : "the player is no longer holding anything");
@@ -611,8 +712,9 @@ namespace
         uintptr_t catchc = 0;
         uint32_t held = 0;
         const bool found = CatchComponent(static_cast<uintptr_t>(actor), &catchc);
+        uint32_t owner = 0;
         if (found && bp::mem::Read32(catchc + 0x38, &held) && held)
-            Arm(catchc, held, nullptr);
+            Arm(catchc, held, bp::mem::Read32(static_cast<uintptr_t>(actor) + 0x60, &owner) ? owner : 0, nullptr);
         else
         {
             LOG("[teleport] a map teleport started with the player holding nothing%s, so nothing is armed",
@@ -641,6 +743,19 @@ namespace
     }
 
     bool KeepGate() { return g_armed.load(); }
+
+    // The sweep runs every five seconds and at every map confirm, over every
+    // actor a quest stage spawned. While armed, 1.0.6 kept any of them that
+    // anyone was carrying. Now the carrier has to be the actor that armed.
+    bool KeepAccept(uintptr_t actor, uint32_t carriedBy)
+    {
+        const uint32_t want = g_carrier.load();
+        if (!want || carriedBy == want) return true;
+        const char* cls = bp::mem::RttiShort(actor);
+        LOG("[keepcarried] not kept: %s@0x%llX is carried by 0x%08X, not by 0x%08X whose carry this is, so the game "
+            "answers for it", cls ? cls : "?", static_cast<unsigned long long>(actor), carriedBy, want);
+        return false;
+    }
 
     void OnKeep(uintptr_t actor, uintptr_t catchc)
     {
@@ -718,8 +833,19 @@ namespace
         if (s.keepCatch)
         {
             armable = RegisterKeepCatch() && HookTeleport();
-            // Only notes which release ran. The carry works without it.
-            if (armable) HookCatchUpdate();
+            // Skips the releases for the player's carry alone. Without it
+            // the carry still works, with the releases written for every
+            // catch as up to 1.0.6.
+            if (armable)
+            {
+                g_hookSkips.store(HookCatchUpdate());
+                if (g_hookSkips.load())
+                    LOG_OK("[keepcatch] an armed carry skips the four releases only for the player's catch and for "
+                           "whoever the player carries. Every other catch in the game is let go as usual.");
+                else
+                    LOG_ERR("[keepcatch] without the catch_update hook, an armed carry writes the four releases for "
+                            "every catch in the game, as 1.0.6 did");
+            }
         }
         else LOG("[keepcatch] KeepCatch is 0, so a teleport releases the catch as it always has");
 
@@ -732,6 +858,7 @@ namespace
             // tells the carry check which outlaw it kept.
             bp::keepcarried::SetGate(&KeepGate);
             bp::keepcarried::SetOnKeep(&OnKeep);
+            bp::keepcarried::SetAccept(&KeepAccept);
             InstallKeepCarried();
         }
         else LOG("[keepcarried] KeepCarried is 0, so the departure sweep removes the carried actor as it always has");

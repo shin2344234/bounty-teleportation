@@ -49,4 +49,10 @@ namespace bp::keepcarried
     using OnKeep = void (*)(uintptr_t actor, uintptr_t catchComponent);
     void SetGate(Gate gate);
     void SetOnKeep(OnKeep onKeep);
+
+    // Asked after the gate, once the actor is known to be carried, with the
+    // carrier's handle from its catch component. A no lets the game answer.
+    // The shipping plugin uses it to keep only what the player is carrying.
+    using Accept = bool (*)(uintptr_t actor, uint32_t carriedBy);
+    void SetAccept(Accept accept);
 }

@@ -17,6 +17,7 @@ namespace bp::keepcarried
         bool g_requireClass = true;
         Gate   g_gate = nullptr;
         OnKeep g_onKeep = nullptr;
+        Accept g_accept = nullptr;
         volatile LONG g_asked = 0, g_kept = 0;
         LONG g_reportedAsked = 0, g_reportedKept = 0;
 
@@ -53,6 +54,7 @@ namespace bp::keepcarried
             uintptr_t actor = 0, catchc = 0;
             uint32_t by = 0;
             if (!Carried(comp, &actor, &catchc, &by)) return g_orig(comp, key);
+            if (g_accept && !g_accept(actor, by)) return g_orig(comp, key);
 
             const LONG kept = InterlockedIncrement(&g_kept);
             if (g_onKeep) g_onKeep(actor, catchc);
@@ -93,6 +95,7 @@ namespace bp::keepcarried
 
     void SetGate(Gate gate) { g_gate = gate; }
     void SetOnKeep(OnKeep onKeep) { g_onKeep = onKeep; }
+    void SetAccept(Accept accept) { g_accept = accept; }
 
     void Summarise()
     {
