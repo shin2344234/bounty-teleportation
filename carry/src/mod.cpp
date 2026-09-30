@@ -334,11 +334,15 @@ namespace
 
     SRWLOCK             g_armLock = SRWLOCK_INIT;
     std::atomic<bool>   g_armed{false};
-    ULONGLONG           g_armedAt = 0;
-    std::atomic<uintptr_t> g_playerCatch{0};    // read by the catch_update hook on game threads
+    // Written under g_armLock in Arm and Disarm, read without it in CheckCarry
+    // (the mod thread) and, for g_playerCatch, in the catch_update hook on
+    // game threads, so each is atomic: a plain field read there would be a
+    // data race even though an aligned word never tears on x64.
+    std::atomic<ULONGLONG> g_armedAt{0};
+    std::atomic<uintptr_t> g_playerCatch{0};
     std::atomic<uintptr_t> g_keptCatch{0};
-    int                 g_endStrikes = 0;
-    long                g_arms = 0;
+    std::atomic<int>       g_endStrikes{0};
+    long                   g_arms = 0;
 
     // Whose carry it is. An actor's own handle is the dword at +0x60, just
     // before its component table at +0x68: Bounty Probe's object dumps of 20
@@ -616,9 +620,9 @@ namespace
         const bool ok = patch ? SetReleases(true) : true;
         if (ok && patch) g_patched.store(true);
         g_armed.store(ok);
-        g_armedAt = GetTickCount64();
+        g_armedAt.store(GetTickCount64());
         g_playerCatch.store(playerCatch);
-        g_endStrikes = 0;
+        g_endStrikes.store(0);
         g_lastEarly = early != nullptr;
         g_earlyPending.store(early != nullptr);
         g_carrier.store(owner);
@@ -664,8 +668,8 @@ namespace
         g_carrier.store(0);
         g_held.store(0);
         g_playerCatch.store(0);
-        g_endStrikes = 0;
-        const ULONGLONG armedAt = g_armedAt;
+        g_endStrikes.store(0);
+        const ULONGLONG armedAt = g_armedAt.load();
         const ULONGLONG held = GetTickCount64() - armedAt;
         ReleaseSRWLockExclusive(&g_armLock);
         LOG("[teleport] the releases are back to the game's own after %llu seconds: %s",
@@ -677,7 +681,7 @@ namespace
     void CheckCarry()
     {
         if (!g_armed.load()) return;
-        if (g_earlyPending.load() && GetTickCount64() - g_armedAt > kEarlyMs)
+        if (g_earlyPending.load() && GetTickCount64() - g_armedAt.load() > kEarlyMs)
         {
             Disarm("a release let go of the player's catch early, but no map teleport followed within a second");
             return;
@@ -685,7 +689,7 @@ namespace
         const uintptr_t kept = g_keptCatch.load();
         if (!kept)
         {
-            if (GetTickCount64() - g_armedAt > kNoKeepMs)
+            if (GetTickCount64() - g_armedAt.load() > kNoKeepMs)
                 Disarm("the sweep kept nobody, so nothing came through the teleport with the player");
             return;
         }
@@ -693,7 +697,7 @@ namespace
         const bool outlaw = StillCatch(kept) && bp::mem::Read32(kept + 0x28, &carriedBy) && carriedBy;
         const uintptr_t mine = g_playerCatch.load();
         const bool player = StillCatch(mine) && bp::mem::Read32(mine + 0x38, &held) && held;
-        if (outlaw && player) { g_endStrikes = 0; return; }
+        if (outlaw && player) { g_endStrikes.store(0); return; }
         if (++g_endStrikes < kEndPolls) return;
         Disarm(!outlaw ? "the outlaw is no longer carried" : "the player is no longer holding anything");
     }
