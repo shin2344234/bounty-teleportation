@@ -6,7 +6,8 @@ exe 1.0.0.2944 and on the 1.0.0.2949 and 1.0.0.2976 patches. 1.0.3 and
 1.0.4 were played on 1.0.0.2976 before release, each with an outlaw carried
 through a map teleport. 1.0.5 went out untested and a player confirmed it the
 same day. The fix in 1.0.6 went to one player as a test build first, and they
-carried their bounty through with it. 1.0.1 and 1.0.2 went out untested.
+carried their bounty through with it. 1.0.1, 1.0.2 and 1.0.7 went out
+untested.
 
 Without it the teleport goes through and the outlaw does not. Two separate
 things remove him during the confirm: the teleport releases the catch, and
@@ -64,10 +65,19 @@ petting an animal, putting a note away and an interrupted grab, so players got
 stuck in all three. 1.0.1 hooks the map teleport handler at `+0x2BC9640`,
 which has two callers, both in the teleport's message handler, and which moves
 the player before calling the first release at `+0x2BC9928`. If the player is
-holding something when it starts, the releases are written there, and they
-come out again when the sweep keeps nobody within five seconds, when the kept
-outlaw is no longer carried, or when the player is no longer holding
-anything.
+holding something when it starts, the carry is armed there, and it ends when
+the sweep keeps nobody within five seconds, when the kept outlaw is no longer
+carried, or when the player is no longer holding anything.
+
+Up to 1.0.6 arming wrote the four patches, which skip each release for every
+catch in the game, NPCs' included. Since 1.0.7 the `catch_update` hook does the
+skipping instead, and only for the player's catch, the outlaw's, and a client
+catch holding the outlaw. Each patch jumps from its guard to the instruction
+after the call, over a block that only loads the call's arguments, so
+returning from the hook without calling through is the same thing for one
+catch. The patches are still written if the hook cannot go in. An actor's
+handle is the dword at `+0x60`, before its component table, and a component's
+actor is at its `+8`; the player-tagged actor is `0xA0100001`.
 
 Addresses below are the 1.0.0.2944 ones. Carrying an actor is a catch, and
 `catch_update` at `+0x20AD3A0` ends one.
@@ -81,7 +91,7 @@ The departure sweep asks whether anyone else holds an actor through a thunk at
 `+0x1F53D10` into `+0xE1478D0`, and on no it removes it. The plugin hooks that
 check and answers yes for an actor whose catch component names a carrier.
 
-The seventh is `catch_update` itself, hooked only to read. Every call on a
+The seventh is `catch_update` itself. Besides the skipping above, every call on a
 catch that is holding or carried something is remembered with the address it
 returns to, and the log lists the recent ones when a carry ends and when a map
 teleport starts with nothing held. On 24 September 2026 two players found
@@ -102,6 +112,19 @@ zx3691 played 1.0.5 with KLIFF TELEPORT on the day it came out and the bounty
 came through, and their log shows the early hold taking effect 60 ms before the
 teleport handler. zx3691 found the conflict, hansdepaula narrowed it to that
 category, and zx3691's logs named the release and confirmed the fix.
+
+## Crashes in 1.0.6
+
+Five players reported crashes on 1.0.6, four in quest cutscenes, among them
+Chapter 6 when Yann enters and "Find William in Ivynook". gamniac's crash dump
+is a stack overflow on the game's main thread: `+0x141A900`, which numbers a
+graph by depth, called itself 347,922 times, the way it does when the graph
+has a loop. Their DMM history crashed with this plugin as the only ASI. 1.0.6
+armed early on any catch that let go through a teleport release, an NPC's in a
+cutscene included, then skipped the releases for every catch in the game and
+let the sweep keep any carried actor. 1.0.7 arms early only on the player's own
+catch, skips releases only for the player's carry, and keeps only an actor the
+player carries. It went out without a play test.
 
 1.0.5 only started early when the client's state transition let go first.
 thatswedishdad's log on 27 September 2026 had the client's character control
