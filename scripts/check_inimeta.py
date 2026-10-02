@@ -2,8 +2,8 @@
 
 Bounty Teleportation embeds carry/BountyTeleportation.ini itself as the
 INIMETA resource (see carry/src/resources.rc): the file a first run writes
-and the file INI Master reads are the same bytes, with a ;@mod line and two
-;@ restart flags added as comments the game ignores. Nothing here is read
+and the file INI Master reads are the same bytes, with a ;@mod line and a ;@ line above each key, comments the game
+ignores. Nothing here is read
 from that file at runtime, so a key added to ReadSettings with no matching
 line in the ini, or a default that drifts between the two, would ship with
 INI Master showing the wrong thing and nothing would fail.
@@ -18,7 +18,9 @@ The code is the authority. For every key ReadSettings() reads from
     default and the reset INI Master would write;
   - the key's comment block must carry ";@ restart", because the plugin
     reads its ini once at startup and never again (no IniWatcher, checked
-    against mod.cpp).
+    against mod.cpp);
+  - a key read as GetPrivateProfileIntW(...) != 0 must say type=bool, so
+    INI Master shows a checkbox from the metadata rather than a guess.
 
 It also checks the ";@mod" line: name matches release.json's "name", author
 is Seth, url is the nexus.page from release.json, and live=0, since nothing
@@ -92,10 +94,11 @@ def parse_mod_line(text):
 
 
 def parse_ini(text):
-    """key -> (section, default, has_restart) for every key under a section,
-    plus the raw ;@mod line's fields."""
+    """key -> (section, default, has_restart, type) for every key under a
+    section."""
     section = None
     pending_restart = False
+    pending_type = None
     keys = {}
     for line in text.splitlines():
         s = line.strip()
@@ -103,19 +106,25 @@ def parse_ini(text):
         if sec_m:
             section = sec_m.group(1)
             pending_restart = False
+            pending_type = None
             continue
         if s.startswith(";@") or s.startswith("#@"):
             if re.search(r'(^|\s)restart(\s|$)', s[2:]):
                 pending_restart = True
+            type_m = re.search(r'(^|\s)type=(\w+)', s[2:])
+            if type_m:
+                pending_type = type_m.group(2)
             continue
         if s.startswith(";") or s.startswith("#") or not s:
             if not s:
                 pending_restart = False  # a blank line ends the block above a key
+                pending_type = None
             continue
         kv = re.match(r'^(\w+)\s*=\s*(.*)$', s)
         if kv and section:
-            keys[kv.group(1)] = (section, kv.group(2).strip(), pending_restart)
+            keys[kv.group(1)] = (section, kv.group(2).strip(), pending_restart, pending_type)
             pending_restart = False
+            pending_type = None
     return keys
 
 
@@ -153,7 +162,7 @@ def main():
     for key, (section, kind, default) in reader.items():
         if key not in ini_keys:
             continue
-        ini_section, ini_value, has_restart = ini_keys[key]
+        ini_section, ini_value, has_restart, ini_type = ini_keys[key]
         if ini_section != section:
             errors.append("%s: ReadSettings() reads [%s], the ini has it under [%s]"
                            % (key, section, ini_section))
@@ -162,6 +171,9 @@ def main():
             if ini_value not in ("0", "1") or ini_value != want:
                 errors.append("%s: ini default %s, GetPrivateProfileIntW falls back to %s"
                                % (key, ini_value, want))
+            if ini_type != "bool":
+                errors.append("%s: ;@ type=%s, the code reads it as a 0/1 switch, so type=bool"
+                               % (key, ini_type))
         elif kind == "int":
             if str(default) != ini_value:
                 errors.append("%s: ini default %s, GetPrivateProfileIntW falls back to %s"
