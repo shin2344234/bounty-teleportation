@@ -24,8 +24,9 @@ read once, when the game starts.
 
 - **KeepCatch** (1) Keeps hold of the catch through the teleport. Four places
   let go of one and all four are skipped, but only from the moment a map
-  teleport starts with you holding someone until that carry ends. The rest of
-  the time the game lets go of things exactly as it always has.
+  teleport starts with you holding someone until that carry ends, and only
+  for you and the one you carry. Everyone else, and you the rest of the time,
+  lets go of things exactly as the game always has.
 - **KeepCarried** (1) Keeps the man himself. Leaving a field removes every
   actor spawned in it unless something says it still holds him, and this says
   so. On its own it does nothing, because the release runs first and clears
@@ -87,7 +88,15 @@ A different part of the game can let go early too. thatswedishdad's log had
 the client's character control doing it, where 1.0.5 only watched the state
 transition. 1.0.6 starts holding early from either one, and from the server's
 character control as well, and thatswedishdad carried their bounty through
-with it. If the bounty is left behind on 1.0.6, send the log.
+with it. If the bounty is left behind, send the log.
+
+## Crashes on 1.0.6
+
+1.0.6 could crash the game in quest cutscenes, such as Chapter 6 when Yann
+enters or "Find William in Ivynook". It mistook an NPC letting go of someone
+for the start of a teleport and kept that grip on, and while a bounty was
+being carried it held every character's grip in the game along with yours.
+1.0.7 reacts only to your own character and the one you carry.
 
 ## Antivirus
 
