@@ -58,7 +58,7 @@ ones go up to `.24`, so if you have already restarted the game, attach the one
 from the session where it happened. Post it on the bugs tab or as a GitHub
 issue.
 
-Seven addresses are written or hooked and each is checked against the bytes
+Eight addresses are written or hooked and each is checked against the bytes
 that should be there first. The plugin carries a set of them for each game
 build it knows, 1.0.0.2944, 1.0.0.2949 and 1.0.0.2976, and uses whichever
 the game matches. On a game update matching none of them it writes nothing,
@@ -86,9 +86,9 @@ logs named the release and confirmed the fix.
 
 A different part of the game can let go early too. thatswedishdad's log had
 the client's character control doing it, where 1.0.5 only watched the state
-transition. 1.0.6 starts holding early from either one, and from the server's
-character control as well, and thatswedishdad carried their bounty through
-with it. If the bounty is left behind, send the log.
+transition. 1.0.6 starts holding early from either one, and thatswedishdad
+carried their bounty through with it. If the bounty is left behind, send the
+log.
 
 ## Crashes on 1.0.6
 
@@ -97,6 +97,15 @@ enters or "Find William in Ivynook". It mistook an NPC letting go of someone
 for the start of a teleport and kept that grip on, and while a bounty was
 being carried it held every character's grip in the game along with yours.
 1.0.7 reacts only to your own character and the one you carry.
+
+## Stuck carries after cutscenes on 1.0.7
+
+On 1.0.7, carrying someone into a quest cutscene could leave them stuck to
+Kliff, such as the sheep you bring back to the child or the man you carry out
+of the burning house. The scene lets go of them the way a shortened teleport
+does, and 1.0.7 held on and never let go when no teleport came. 1.0.8 lets go
+the way the game asked if no teleport follows within half a second. If someone
+is still stuck to you, send the log.
 
 ## Antivirus
 
@@ -107,7 +116,7 @@ archive it describes.
 
 A scanner may still flag `BountyTeleportation.asi` one day, because the shape
 of what it does looks like a trainer to a model: it is a DLL loaded into the
-game that writes jumps over four of the game's own functions and hooks three
+game that writes jumps over four of the game's own functions and hooks four
 more. It imports kernel32 and nothing else, so there is no network code and
 no window in it, and it reads and writes no registry key and no game file. It
 is code signed, and Properties, Digital Signatures shows Seth Walker under

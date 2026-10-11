@@ -22,11 +22,13 @@ TELEPORT_GUARD = "83 79 38 00 74 04 B3 01 EB 07 83 79 28 00 0F 95"
 WATCHDOG_GUARD = "85 FF 75 04 85 DB 74 3E"
 HOLDER_HEAD    = "48 89 5C 24 08 44 8B 41 1C"
 TELEPORT_HEAD  = "48 8B C4 48 89 58 10 48 89 70 18 48 89 78 20"
+TICK_HEAD      = "48 89 5C 24 08 48 89 6C 24 18 48 89 74 24 20 57 41 56 41 57 48 83 EC 40 48 8B F1"
 
 # Each build: catch_update, then the four releases as
 # (label, patch rva, orig, guard, guard shape, call, vtable, slot target, thunk to),
 # then the holder check, its thunk and the sweep's call, then the teleport
-# handler and its two callers.
+# handler and its two callers, then the catch component's tick, which holds
+# the watchdog release and is where 1.0.8 makes a skipped release again.
 BUILDS = {
     "1.0.0.2976": dict(
         catch_update=0x20AD400,
@@ -38,6 +40,7 @@ BUILDS = {
         ],
         holder=0xDD9D1E0, thunk=0x1F53D50, sweep=0x28181E0,
         teleport=0x2BC96C0, calls=(0x2BCA5DD, 0x2BCAB80),
+        tick=0x20AE5A0,
     ),
     "1.0.0.2949": dict(
         catch_update=0x20AD3B0,
@@ -49,6 +52,7 @@ BUILDS = {
         ],
         holder=0xDD526C0, thunk=0x1F53D20, sweep=0x2818170,
         teleport=0x2BC9650, calls=(0x2BCA56D, 0x2BCAB10),
+        tick=0x20AE550,
     ),
     "1.0.0.2944": dict(
         catch_update=0x20AD3A0,
@@ -60,6 +64,7 @@ BUILDS = {
         ],
         holder=0xE1478D0, thunk=0x1F53D10, sweep=0x2818160,
         teleport=0x2BC9640, calls=(0x2BCA55D, 0x2BCAB00),
+        tick=0x20AE540,
     ),
 }
 
@@ -107,6 +112,10 @@ def check_build(name, spec, loud):
     for c in spec["calls"]:
         t = rel32(c, 0xE8)
         want(f"caller +0x{c:X}", f"+0x{t:X}" if t else "not a call", f"+0x{spec['teleport']:X}")
+
+    want("catch tick prologue", hexs(spec["tick"], 27), TICK_HEAD)
+    # The watchdog's guard sits 0x88 into the tick on every build.
+    want("watchdog inside the tick", f"+0x{spec['releases'][3][1] - 0x88:X}", f"+0x{spec['tick']:X}")
 
     if loud:
         print(f"\n{name}: {'every address matches' if not bad else str(len(bad)) + ' mismatched'}")

@@ -36,12 +36,12 @@ plugin's source files are compiled out of `mod\src` rather than copied, so a
 fix to the log, the memory reads or the hook engine lands in both plugins.
 
 `carry\scripts\sign.ps1` signs the plugin and `carry\scripts\package.ps1` then
-checks the seven addresses against the game, builds the two archives and prints
+checks the eight addresses against the game, builds the two archives and prints
 their checksums.
 
 ## What it patches
 
-Seven addresses, each checked against the bytes that should be there before
+Eight addresses, each checked against the bytes that should be there before
 anything is written, and all of it put back if the plugin is unloaded. A game
 update moves them, as the 21 September 2026 patch to exe 1.0.0.2949 moved
 every one and the 23 September patch to 1.0.0.2976 moved them again. The
@@ -98,7 +98,13 @@ teleport starts with nothing held. On 24 September 2026 two players found
 the KLIFF TELEPORT patch of Even Faster Vanilla Animations Trimmer leaving the
 bounty behind, and no log could say which release had let go.
 
-`research\verify_carry.py` reads all seven out of the executable and checks
+The eighth is the catch component's tick, `+0x20AE5A0` on 2976, the function
+the watchdog release sits in. Since 1.0.8 a release that an early hold skipped
+is made again there when no teleport follows, so it runs on the thread and side
+it was meant for. `catch_update` picks the server's actors or the client's from
+a thread-local flag, which is why the plugin's own thread cannot make that call.
+
+`research\verify_carry.py` reads all eight out of the executable and checks
 them, which is the test to run first if an update breaks the mod.
 
 ## Known conflict
@@ -132,6 +138,25 @@ letting go 78 ms before the teleport handler instead, with no trimmer named,
 and the bounty stayed behind. 1.0.6 starts early from any of the three
 teleport releases. thatswedishdad ran it as a test build and the bounty came
 through.
+
+## Stuck carries after cutscenes in 1.0.7
+
+wanjia1234566 reported on 10 October 2026 that on 1.0.7 a carried actor stays
+stuck to Kliff once a quest cutscene starts: the sheep brought back to the
+child who lost it, and the man carried out of the burning house. The scene ends
+the player's catch through a client release, and 1.0.7 took that for a
+shortened teleport, held the catch and skipped the release. With no teleport
+coming, it disarmed a second later, but nothing made the skipped release
+again, so the catch stayed on.
+
+1.0.8 keeps every release it skips while an early hold waits for its teleport.
+If no teleport handler runs within 500 ms, it makes each one again at that
+catch's next tick, provided the catch still holds the same actor. The early
+hold now starts only from the two client releases. The server's character
+control is called by the teleport handler after it arms, so it never comes
+first in a teleport, and 1.0.6 and 1.0.7 were wrong to start from it. 1.0.8
+went out without a play test, and wanjia1234566 sent no log, so the cause is
+read from the code rather than seen in a log.
 
 ## Antivirus
 

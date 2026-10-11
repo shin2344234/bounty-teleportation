@@ -98,6 +98,7 @@ namespace
         uintptr_t   teleportCall1; // its two callers, both in the message handler
         uintptr_t   teleportCall2;
         OtherRelease others[2];    // zero where they were never derived
+        uintptr_t   catchTick;     // the catch component's tick, the watchdog's own function
     };
 
     // The releases, in order: slot 0x200 of the server and common
@@ -127,6 +128,7 @@ namespace
             0xDD9D1E0, 0x1F53D50, 0x28181E0,
             0x2BC96C0, 0x2BCA5DD, 0x2BCAB80,
             { { "the release in +0x156F550", 0x156F9F5 }, { "the release in +0x20C0610", 0x20C07C6 } },
+            0x20AE5A0,
         },
         {
             "1.0.0.2949", 0x20AD3B0,
@@ -142,6 +144,7 @@ namespace
             },
             0xDD526C0, 0x1F53D20, 0x2818170,
             0x2BC9650, 0x2BCA56D, 0x2BCAB10,
+            {}, 0x20AE550,
         },
         {
             "1.0.0.2944", 0x20AD3A0,
@@ -157,6 +160,7 @@ namespace
             },
             0xE1478D0, 0x1F53D10, 0x2818160,
             0x2BC9640, 0x2BCA55D, 0x2BCAB00,
+            {}, 0x20AE540,
         },
     };
 
@@ -377,12 +381,13 @@ namespace
     // client catch holding the same outlaw counts as the player's even if its
     // actor's +0x60 should read differently from the server's.
     constexpr uint32_t  kPlayerHandle = 0xA0100001;
-    constexpr ULONGLONG kEarlyMs      = 1000;
+    constexpr ULONGLONG kEarlyMs      = 500;
     std::atomic<uint32_t> g_carrier{0};         // the handle a kept actor's carrier must be
     std::atomic<uint32_t> g_held{0};            // the handle of whoever the player is carrying
     std::atomic<bool>     g_earlyPending{false};
     std::atomic<bool>     g_hookSkips{false};   // catch_update is hooked, so no patch is written
     std::atomic<bool>     g_patched{false};     // this carry wrote the four patches instead
+    std::atomic<bool>     g_earlyOk{false};     // the catch tick is hooked, so an early arm can be undone
 
     uint32_t OwnerHandle(uintptr_t comp)
     {
@@ -454,6 +459,141 @@ namespace
 
     bool Arm(uintptr_t playerCatch, uint32_t held, uint32_t owner, const char* early);
 
+    // ---- putting back what an early arm skipped ---------------------------
+    //
+    // An early arm is a guess that a teleport is on its way, and a quest
+    // cutscene makes the same guess come out wrong. wanjia1234566 reported on
+    // 10 October 2026 that on 1.0.7 a sheep carried to the child who lost it,
+    // and the man carried out of the burning house, stay stuck to Kliff once
+    // the scene starts. The scene ends the player's catch through the same
+    // client releases a shortened teleport does, 1.0.7 armed and skipped
+    // them, and when no teleport came it disarmed without ever ending the
+    // catch the scene had asked to end.
+    //
+    // So every call skipped while an early arm waits for its teleport is kept
+    // here, and if the arm runs out it is made again, on the catch it was
+    // meant for. catch_update reads a thread-local flag to pick between the
+    // server's actors and the client's, so it cannot be called from the mod
+    // thread; the replay waits for that catch component's own tick at
+    // catchTick (slot 0x140 of the client's catch vtable, and the first call
+    // in the server's), which runs on the right thread several times a
+    // second and is the function the watchdog release sits in. The call takes
+    // nothing from its caller but the component, the force byte, the float
+    // and the reason; its out pointer only ever receives a dword.
+    struct Skipped
+    {
+        uintptr_t comp;
+        uint32_t  held, carrier;   // what it held when skipped; a replay needs the same
+        uint64_t  force, reason;
+        float     f;
+        const char* label;
+    };
+    constexpr int       kSkipped  = 8;
+    constexpr ULONGLONG kReplayMs = 5000;  // a catch whose tick never comes in that time is left alone
+    Skipped               g_skipped[kSkipped] = {};
+    int                   g_skippedCount = 0;
+    SRWLOCK               g_skippedLock = SRWLOCK_INIT;
+    std::atomic<bool>     g_replayDue{false};
+    std::atomic<ULONGLONG> g_replayUntil{0};
+
+    void KeepSkipped(uintptr_t comp, uint32_t held, uint32_t carrier, uint64_t force, float f, uint64_t reason,
+                     const char* label)
+    {
+        AcquireSRWLockExclusive(&g_skippedLock);
+        bool dup = false;
+        for (int k = 0; k < g_skippedCount; ++k)
+            if (g_skipped[k].comp == comp) { dup = true; break; }
+        if (!dup && g_skippedCount < kSkipped)
+            g_skipped[g_skippedCount++] = { comp, held, carrier, force, reason, f, label };
+        ReleaseSRWLockExclusive(&g_skippedLock);
+    }
+
+    // A teleport did follow, so the skips were the ones it needed, or a new
+    // early arm is starting its own list.
+    void ForgetSkipped()
+    {
+        AcquireSRWLockExclusive(&g_skippedLock);
+        g_skippedCount = 0;
+        g_replayDue.store(false);
+        ReleaseSRWLockExclusive(&g_skippedLock);
+    }
+
+    // The early arm ran out. Called from Disarm with g_armLock held, so an
+    // early arm on a game thread cannot start its own list in between, and
+    // it returns how many are due for Disarm to log after the lock.
+    int ReplaySkipped()
+    {
+        AcquireSRWLockExclusive(&g_skippedLock);
+        const int n = g_skippedCount;
+        if (n)
+        {
+            g_replayUntil.store(GetTickCount64() + kReplayMs);
+            g_replayDue.store(true);
+        }
+        ReleaseSRWLockExclusive(&g_skippedLock);
+        return n;
+    }
+
+    // The mod thread's side: give up on a catch whose tick never came.
+    void ExpireSkipped()
+    {
+        if (!g_replayDue.load() || GetTickCount64() < g_replayUntil.load()) return;
+        AcquireSRWLockExclusive(&g_skippedLock);
+        if (!g_replayDue.load() || GetTickCount64() < g_replayUntil.load())
+        {
+            ReleaseSRWLockExclusive(&g_skippedLock);
+            return;
+        }
+        Skipped left[kSkipped];
+        const int n = g_skippedCount;
+        memcpy(left, g_skipped, sizeof left);
+        g_skippedCount = 0;
+        g_replayDue.store(false);
+        ReleaseSRWLockExclusive(&g_skippedLock);
+        for (int k = 0; k < n; ++k)
+            LOG_ERR("[release] the catch at 0x%llX holding 0x%08X had no tick within %llu seconds, so the release %s "
+                    "skipped was not made again", static_cast<unsigned long long>(left[k].comp), left[k].held,
+                    static_cast<unsigned long long>(kReplayMs / 1000), left[k].label);
+    }
+
+    // Runs on every catch component's tick, on the game's threads, so the
+    // common case is one atomic load.
+    void ReplayOn(uintptr_t comp)
+    {
+        if (!g_replayDue.load(std::memory_order_relaxed)) return;
+        Skipped s = {};
+        bool found = false;
+        AcquireSRWLockExclusive(&g_skippedLock);
+        for (int k = 0; k < g_skippedCount; ++k)
+            if (g_skipped[k].comp == comp)
+            {
+                s = g_skipped[k];
+                g_skipped[k] = g_skipped[--g_skippedCount];
+                found = true;
+                break;
+            }
+        if (!g_skippedCount) g_replayDue.store(false);
+        ReleaseSRWLockExclusive(&g_skippedLock);
+        if (!found) return;
+
+        // The same address holding someone else is a different catch by
+        // now, and a release made on it would drop the wrong actor.
+        uint32_t held = 0, carrier = 0;
+        bp::mem::Read32(comp + 0x38, &held);
+        bp::mem::Read32(comp + 0x28, &carrier);
+        if (held != s.held || carrier != s.carrier)
+        {
+            LOG("[release] not made again: the catch at 0x%llX holds 0x%08X carried by 0x%08X now, not 0x%08X "
+                "carried by 0x%08X as when %s was skipped", static_cast<unsigned long long>(comp), held, carrier,
+                s.held, s.carrier, s.label);
+            return;
+        }
+        uint64_t out = 0;
+        g_catchUpdateOrig(comp, reinterpret_cast<uint64_t>(&out), s.force, s.f, s.reason, 0, 0, 0);
+        LOG("[release] made %s again on the catch at 0x%llX holding 0x%08X carried by 0x%08X, which no teleport "
+            "needed kept", s.label, static_cast<unsigned long long>(comp), s.held, s.carrier);
+    }
+
     // The first three releases are the teleport's own, reason 9, and in the
     // ordinary teleport each runs after the teleport handler, when the four
     // are already written and its patched jump skips the call. A shortened
@@ -464,18 +604,23 @@ namespace
     // before the handler, the watchdog letting go of the server's 15 ms after
     // that, and the handler finding nothing held. thatswedishdad's log on 27
     // September has the client's character control doing the same 78 ms
-    // before it. So a call from any of the three on a catch that is holding
-    // someone arms the four right there and is skipped, which is what the
-    // written jump would have done. The code after each call overwrites or
-    // clears the register and never reads what catch_update returns. The
-    // watchdog is left out: it runs on every catch several times a second,
-    // and an unarmed call from it is the game ending a carry as usual.
+    // before it. So a call from either client release on a catch that is
+    // holding someone arms the four right there and is skipped, which is what
+    // the written jump would have done. The code after each call overwrites
+    // or clears the register and never reads what catch_update returns. The
+    // server's character control is left out: the teleport handler is what
+    // calls it, after arming, so it cannot come first in a teleport, and
+    // before one it is the game ending a carry for some other reason. 1.0.6
+    // and 1.0.7 armed on it too. The watchdog is left out because it runs on
+    // every catch several times a second, and an unarmed call from it is the
+    // game ending a carry as usual.
     //
-    // Only the player's own catch counts. The three releases also end an
-    // NPC's catch in a cutscene, and 1.0.6 armed on those too (see
-    // kPlayerHandle). A call on any other actor's catch goes through to the
-    // game and is written to the log. If no teleport handler follows an early
-    // arm within a second, the carry check disarms.
+    // Only the player's own catch counts. The releases also end an NPC's
+    // catch in a cutscene, and 1.0.6 armed on those too (see kPlayerHandle).
+    // A call on any other actor's catch goes through to the game and is
+    // written to the log. If no teleport handler follows an early arm within
+    // half a second, the carry check disarms, and every call skipped in
+    // between is made again (see Skipped).
     uint64_t CatchUpdateDetour(uint64_t comp, uint64_t out, uint64_t force, float f,
                                uint64_t reason, uint64_t g, uint64_t h, uint64_t i)
     {
@@ -499,12 +644,14 @@ namespace
                 const bool ours = c == g_playerCatch.load() || (want && (owner == want || carrier == want)) ||
                                   (mine && held == mine);
                 Remember(c, from, held, carrier, owner, static_cast<uint8_t>(reason), ours);
-                if (ours) return 0;
-                return g_catchUpdateOrig(comp, out, force, f, reason, g, h, i);
+                if (!ours) return g_catchUpdateOrig(comp, out, force, f, reason, g, h, i);
+                if (g_earlyPending.load())
+                    KeepSkipped(c, held, carrier, force, f, reason, g_build->releases[rel].label);
+                return 0;
             }
 
             bool skip = false;
-            if (rel >= 0 && rel < 3 && held && !g_armed.load())
+            if (rel >= 1 && rel < 3 && held && !g_armed.load() && g_earlyOk.load())
             {
                 if (owner != kPlayerHandle)
                     LOG("[release] %s let go of 0x%08X for 0x%08X, which is not the player, so the game ends that "
@@ -513,7 +660,11 @@ namespace
                     skip = Arm(c, held, owner, g_build->releases[rel].label);
             }
             Remember(c, from, held, carrier, owner, static_cast<uint8_t>(reason), skip);
-            if (skip) return 0;
+            if (skip)
+            {
+                KeepSkipped(c, held, carrier, force, f, reason, g_build->releases[rel].label);
+                return 0;
+            }
         }
         return g_catchUpdateOrig(comp, out, force, f, reason, g, h, i);
     }
@@ -576,6 +727,47 @@ namespace
         return true;
     }
 
+    // The catch component's tick takes the component in rcx and a pointer
+    // to a byte in rdx, and reads nothing else of its caller's.
+    using CatchTickFn = uint64_t (*)(uint64_t, uint64_t, uint64_t, uint64_t);
+    CatchTickFn g_catchTickOrig = nullptr;
+
+    uint64_t CatchTickDetour(uint64_t comp, uint64_t b, uint64_t c, uint64_t d)
+    {
+        ReplayOn(static_cast<uintptr_t>(comp));
+        return g_catchTickOrig(comp, b, c, d);
+    }
+
+    // mov [rsp+8],rbx / mov [rsp+0x18],rbp / mov [rsp+0x20],rsi / push rdi /
+    // push r14 / push r15 / sub rsp,0x40 / mov rsi,rcx / cmp byte [rdx],0.
+    const uint8_t kTickHead[27] = { 0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x18, 0x48, 0x89, 0x74, 0x24,
+                                    0x20, 0x57, 0x41, 0x56, 0x41, 0x57, 0x48, 0x83, 0xEC, 0x40, 0x48, 0x8B, 0xF1 };
+
+    // Without it an early arm that runs out cannot put back what it skipped,
+    // so early arming is off too and only the handler arms.
+    bool HookCatchTick()
+    {
+        const uintptr_t target = bp::mem::Game().base + g_build->catchTick;
+        uint8_t head[sizeof kTickHead] = {};
+        if (!bp::mem::ReadBytes(target, head, sizeof head) || memcmp(head, kTickHead, sizeof head) != 0)
+        {
+            LOG_ERR("[release] +0x%llX does not start the way the catch tick does, so it is not hooked",
+                    static_cast<unsigned long long>(g_build->catchTick));
+            return false;
+        }
+        char why[160] = "";
+        if (!bp::farhook::Install("catch_tick", target, reinterpret_cast<void*>(&CatchTickDetour),
+                                  reinterpret_cast<void**>(&g_catchTickOrig), why, sizeof why))
+        {
+            LOG_ERR("[release] could not hook the catch tick at +0x%llX: %s",
+                    static_cast<unsigned long long>(g_build->catchTick), why);
+            return false;
+        }
+        LOG_OK("[release] hooked the catch tick at +0x%llX, where a release an early arm skipped is made again if no "
+               "teleport follows", static_cast<unsigned long long>(g_build->catchTick));
+        return true;
+    }
+
     bool CatchComponent(uintptr_t actor, uintptr_t* out)
     {
         uintptr_t table = 0, catchc = 0;
@@ -629,6 +821,9 @@ namespace
         g_held.store(held);
         if (!was) g_keptCatch.store(0);
         ++g_arms;
+        // An early arm starts its own list, and the handler arming means a
+        // teleport came and wanted whatever was skipped.
+        ForgetSkipped();
         const long n = g_arms;
         ReleaseSRWLockExclusive(&g_armLock);
         if (early)
@@ -656,7 +851,9 @@ namespace
         return ok;
     }
 
-    void Disarm(const char* why)
+    // `replay` is set only when an early arm ran out with no teleport; every
+    // other end of a carry forgets the skips, since a teleport wanted them.
+    void Disarm(const char* why, bool replay = false)
     {
         AcquireSRWLockExclusive(&g_armLock);
         if (!g_armed.load()) { ReleaseSRWLockExclusive(&g_armLock); return; }
@@ -671,19 +868,27 @@ namespace
         g_endStrikes.store(0);
         const ULONGLONG armedAt = g_armedAt.load();
         const ULONGLONG held = GetTickCount64() - armedAt;
+        int due = 0;
+        if (replay) due = ReplaySkipped();
+        else ForgetSkipped();
         ReleaseSRWLockExclusive(&g_armLock);
         LOG("[teleport] the releases are back to the game's own after %llu seconds: %s",
             static_cast<unsigned long long>(held / 1000), why);
         ListReleases(armedAt, "since the teleport armed");
+        if (due)
+            LOG("[release] %d skipped release%s will be made again at the next tick of %s catch, since no teleport "
+                "needed %s", due, due == 1 ? "" : "s", due == 1 ? "its" : "their", due == 1 ? "it" : "them");
     }
 
     // The mod thread's side, ten times a second while armed.
     void CheckCarry()
     {
+        ExpireSkipped();
         if (!g_armed.load()) return;
         if (g_earlyPending.load() && GetTickCount64() - g_armedAt.load() > kEarlyMs)
         {
-            Disarm("a release let go of the player's catch early, but no map teleport followed within a second");
+            Disarm("a release let go of the player's catch early, but no map teleport followed within half a second",
+                   true);
             return;
         }
         const uintptr_t kept = g_keptCatch.load();
@@ -843,6 +1048,10 @@ namespace
             if (armable)
             {
                 g_hookSkips.store(HookCatchUpdate());
+                if (g_hookSkips.load()) g_earlyOk.store(HookCatchTick());
+                if (!g_earlyOk.load())
+                    LOG_ERR("[keepcatch] a release that lets go just before the teleport handler runs is not caught, "
+                            "so a shortened teleport sequence leaves the bounty behind");
                 if (g_hookSkips.load())
                     LOG_OK("[keepcatch] an armed carry skips the four releases only for the player's catch and for "
                            "whoever the player carries. Every other catch in the game is let go as usual.");
