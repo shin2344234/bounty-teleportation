@@ -380,8 +380,41 @@ namespace
     // catch components, apart from the server's the handler arms on, and a
     // client catch holding the same outlaw counts as the player's even if its
     // actor's +0x60 should read differently from the server's.
+    //
+    // Playing as Damiane or Oongka changes the answer. Master Looter's notes
+    // (docs/investigations/DAMIANE.md there) split the player into the
+    // 0xA0100001 identity and the body on screen. As Kliff they are one actor.
+    // As Damiane or Oongka the body is a separate 0xB0 actor, 0xB0100002 in
+    // Master Looter's LuxDragon log, and the catch belongs to the body: the
+    // outlaw in both of kuodo20's 1.0.3 logs of 24 September 2026 is "carried
+    // by handle 0xB0100002", where every Kliff log says 0xA0100001. 1.0.7
+    // compared the owner with 0xA0100001 alone, so for those players the early
+    // arm stopped firing, and a trimmed teleport left the bounty behind again.
+    //
+    // The map teleport handler is given the actor being moved, and the catch
+    // it arms on is that actor's, so it is the played body whichever character
+    // that is. Its handle is learned there on every teleport, carrying or not,
+    // and replaces the last one. A
+    // release counts as the player's if its owner is 0xA0100001 or that
+    // handle. An NPC in a cutscene is neither, so the 1.0.6 crash is not
+    // reopened. The first teleport of a session as Damiane or Oongka, if it
+    // is a trimmed one that carries, has nothing learned yet.
     constexpr uint32_t  kPlayerHandle = 0xA0100001;
     constexpr ULONGLONG kEarlyMs      = 500;
+    std::atomic<uint32_t> g_bodyHandle{0};      // the played body when it is not kPlayerHandle, else 0
+    std::atomic<uintptr_t> g_bodyActor{0};      // the actor object the teleport moved under that handle
+
+    // The handle alone is not enough: after a reload, or once Kliff is played
+    // again, another actor can carry the same handle or Damiane's body can stand
+    // in a scene as an NPC. So the release must also come from the very actor
+    // object the last map teleport moved.
+    bool IsPlayed(uint32_t owner, uintptr_t actor)
+    {
+        if (owner == kPlayerHandle) return true;
+        return owner && owner == g_bodyHandle.load() && actor && actor == g_bodyActor.load();
+    }
+
+    void ForgetBody(const char* why);
     std::atomic<uint32_t> g_carrier{0};         // the handle a kept actor's carrier must be
     std::atomic<uint32_t> g_held{0};            // the handle of whoever the player is carrying
     std::atomic<bool>     g_earlyPending{false};
@@ -395,6 +428,15 @@ namespace
         uint32_t handle = 0;
         if (!bp::mem::ReadPtr(comp + 8, &actor) || !bp::mem::Read32(actor + 0x60, &handle)) return 0;
         return handle;
+    }
+
+    // The class of the actor a catch component belongs to, for the log only.
+    const char* OwnerClass(uintptr_t comp)
+    {
+        uintptr_t actor = 0;
+        if (!bp::mem::ReadPtr(comp + 8, &actor)) return "?";
+        const char* cls = bp::mem::RttiShort(actor);
+        return cls ? cls : "?";
     }
 
     // ---- which release let go ---------------------------------------------
@@ -632,6 +674,12 @@ namespace
         {
             const uintptr_t from = bp::mem::Rva(reinterpret_cast<uintptr_t>(_ReturnAddress()));
             const uint32_t owner = OwnerHandle(c);
+            uintptr_t ownerActor = 0;
+            bp::mem::ReadPtr(c + 8, &ownerActor);
+            // The Kliff identity holding someone means Kliff is the body being
+            // played, so a body learned while playing Damiane or Oongka is stale.
+            if (owner == kPlayerHandle && held && g_bodyHandle.load())
+                ForgetBody("0xA0100001 is holding someone, so Kliff is being played again");
             int rel = -1;
             if (g_build)
                 for (int r = 0; r < kReleaseCount; ++r)
@@ -653,9 +701,11 @@ namespace
             bool skip = false;
             if (rel >= 1 && rel < 3 && held && !g_armed.load() && g_earlyOk.load())
             {
-                if (owner != kPlayerHandle)
-                    LOG("[release] %s let go of 0x%08X for 0x%08X, which is not the player, so the game ends that "
-                        "catch as it always has", g_build->releases[rel].label, held, owner);
+                if (!IsPlayed(owner, ownerActor))
+                    LOG("[release] %s let go of 0x%08X for 0x%08X (a %s), which is neither 0x%08X nor the body the "
+                        "last map teleport moved (0x%08X), so the game ends that catch as it always has",
+                        g_build->releases[rel].label, held, owner, OwnerClass(c), kPlayerHandle,
+                        g_bodyHandle.load());
                 else
                     skip = Arm(c, held, owner, g_build->releases[rel].label);
             }
@@ -811,6 +861,10 @@ namespace
         const bool patch = !g_hookSkips.load() || !owner;
         const bool ok = patch ? SetReleases(true) : true;
         if (ok && patch) g_patched.store(true);
+        // Some of the four may be written when a later one is refused. Nothing
+        // would take them out again, since a carry that did not arm never
+        // disarms, so they come out here.
+        if (!ok && patch) SetReleases(false);
         g_armed.store(ok);
         g_armedAt.store(GetTickCount64());
         g_playerCatch.store(playerCatch);
@@ -857,7 +911,7 @@ namespace
     {
         AcquireSRWLockExclusive(&g_armLock);
         if (!g_armed.load()) { ReleaseSRWLockExclusive(&g_armLock); return; }
-        if (g_patched.load()) SetReleases(false);
+        const bool restored = !g_patched.load() || SetReleases(false);
         g_patched.store(false);
         g_armed.store(false);
         g_keptCatch.store(0);
@@ -874,6 +928,9 @@ namespace
         ReleaseSRWLockExclusive(&g_armLock);
         LOG("[teleport] the releases are back to the game's own after %llu seconds: %s",
             static_cast<unsigned long long>(held / 1000), why);
+        if (!restored)
+            LOG_ERR("[teleport] the four releases could not all be written back to the game's own bytes, so some "
+                    "stay skipped for every catch; restart the game");
         ListReleases(armedAt, "since the teleport armed");
         if (due)
             LOG("[release] %d skipped release%s will be made again at the next tick of %s catch, since no teleport "
@@ -907,6 +964,34 @@ namespace
         Disarm(!outlaw ? "the outlaw is no longer carried" : "the player is no longer holding anything");
     }
 
+    // Remembers which actor the map teleport moves, which is the body being
+    // played (see kPlayerHandle). The Kliff identity clears it, so a body
+    // learned for Damiane is not trusted after the player switches back. The
+    // log says so when it changes, with the class, which is what a log from a
+    // Damiane or Oongka player is needed for.
+    void ForgetBody(const char* why)
+    {
+        g_bodyActor.store(0);
+        const uint32_t was = g_bodyHandle.exchange(0);
+        if (was) LOG("[teleport] no longer treating 0x%08X as the played body: %s", was, why);
+    }
+
+    void NotePlayed(uintptr_t actor, uint32_t owner)
+    {
+        if (!owner) return;
+        const uint32_t now = owner == kPlayerHandle ? 0 : owner;
+        g_bodyActor.store(now ? actor : 0);
+        if (g_bodyHandle.exchange(now) == now) return;
+        const char* cls = bp::mem::RttiShort(actor);
+        if (now)
+            LOG("[teleport] the map teleport moved 0x%08X (a %s), not 0xA0100001, so the character being played has "
+                "its own body, and a release that lets go of its catch just before a teleport counts as the "
+                "player's from here", now, cls ? cls : "?");
+        else
+            LOG("[teleport] the map teleport moved 0xA0100001 (a %s), so the played body is the player-tagged actor "
+                "again", cls ? cls : "?");
+    }
+
     using TeleportFn = uint64_t (*)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t);
     TeleportFn g_teleportOrig = nullptr;
 
@@ -922,8 +1007,10 @@ namespace
         uint32_t held = 0;
         const bool found = CatchComponent(static_cast<uintptr_t>(actor), &catchc);
         uint32_t owner = 0;
+        if (!bp::mem::Read32(static_cast<uintptr_t>(actor) + 0x60, &owner)) owner = 0;
+        NotePlayed(static_cast<uintptr_t>(actor), owner);
         if (found && bp::mem::Read32(catchc + 0x38, &held) && held)
-            Arm(catchc, held, bp::mem::Read32(static_cast<uintptr_t>(actor) + 0x60, &owner) ? owner : 0, nullptr);
+            Arm(catchc, held, owner, nullptr);
         else
         {
             LOG("[teleport] a map teleport started with the player holding nothing%s, so nothing is armed",
