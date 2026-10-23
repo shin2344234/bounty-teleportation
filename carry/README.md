@@ -107,6 +107,16 @@ does, and 1.0.7 held on and never let go when no teleport came. 1.0.8 lets go
 the way the game asked if no teleport follows within half a second. If someone
 is still stuck to you, send the log.
 
+## The bounty as Damiane or Oongka
+
+kuodo20's logs showed the bounty being left behind when the trimmer's KLIFF
+TELEPORT was on and the character was Damiane or Oongka. Those two have their
+own body in the world, and the early hold only recognised Kliff's. 1.0.9
+learns the body from each map teleport and holds for it too. The first trimmed
+teleport of a session as Damiane or Oongka can still lose the bounty, since
+nothing has been learned yet. If it is left behind, send the log. 1.0.9 was not
+tested in play.
+
 ## Antivirus
 
 The VirusTotal results for each release are on the Nexus page, with links to

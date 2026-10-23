@@ -6,8 +6,8 @@ exe 1.0.0.2944 and on the 1.0.0.2949 and 1.0.0.2976 patches. 1.0.3 and
 1.0.4 were played on 1.0.0.2976 before release, each with an outlaw carried
 through a map teleport. 1.0.5 went out untested and a player confirmed it the
 same day. The fix in 1.0.6 went to one player as a test build first, and they
-carried their bounty through with it. 1.0.1, 1.0.2 and 1.0.7 went out
-untested.
+carried their bounty through with it. 1.0.1, 1.0.2, 1.0.7, 1.0.8 and 1.0.9
+went out untested.
 
 Without it the teleport goes through and the outlaw does not. Two separate
 things remove him during the confirm: the teleport releases the catch, and
@@ -157,6 +157,28 @@ control is called by the teleport handler after it arms, so it never comes
 first in a teleport, and 1.0.6 and 1.0.7 were wrong to start from it. 1.0.8
 went out without a play test, and wanjia1234566 sent no log, so the cause is
 read from the code rather than seen in a log.
+
+## The early hold as Damiane or Oongka
+
+kuodo20's logs from 24 September 2026 show the carried outlaw held by
+`0xB0100002`, where every log from a Kliff player says `0xA0100001`. Playing
+Damiane or Oongka, the body on screen is its own `0xB0` actor, and the catch
+belongs to that body. The early hold, the one the trimmer's KLIFF TELEPORT
+depends on, only accepted `0xA0100001` since 1.0.7, so for those two characters
+a trimmed teleport left the bounty behind again.
+
+1.0.9 notes the actor and handle that every map teleport moves, and accepts an
+early release from that same actor object as well as from `0xA0100001`. A
+teleport as Kliff, or the Kliff identity seen holding someone, forgets it, so
+after switching back an NPC's catch is never held the way 1.0.6 held them. The
+first trimmed teleport of a session as Damiane or Oongka still has nothing
+learned and can lose the bounty. The log says which body it learned and its
+class.
+
+Two smaller changes came with it. When the four release patches are only
+partly written because one is refused, the written ones go back, and a failed
+write-back when a carry ends is logged. 1.0.9 builds and went out without a
+play test.
 
 ## Antivirus
 
