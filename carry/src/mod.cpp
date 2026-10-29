@@ -46,8 +46,11 @@ namespace
     // client's and the sweep's much further, which turned 1.0.0 and 1.0.1 into
     // plugins that check, find the wrong bytes and do nothing. The 23
     // September patch to 1.0.0.2976 moved them again, the client release by
-    // 0x18280. Every build is listed, and the one whose addresses all check
-    // out is the one used. research\derive_2949.py is how the later sets were
+    // 0x18280. The DLC on 29 October, 1.0.0.3392, moved all of them, put the
+    // character control release in vtable slot 0x1F8 where it had been in
+    // 0x200, and rewrote the teleport handler's prologue, so the slot and the
+    // prologue are per build too. Every build is listed, and the one whose
+    // addresses all check out is the one used. research\derive_2949.py is how the later sets were
     // found: every one of them from a byte pattern or from a reference to
     // something already found, never from an offset against the old build.
 
@@ -62,7 +65,7 @@ namespace
         const uint8_t* shape;    // what that test must read
         unsigned    shapeLen;
         uintptr_t   vtable;      // 0 when the function is in no vtable
-        uintptr_t   slotTarget;  // what slot 0x200 of it must hold
+        uintptr_t   slotTarget;  // what the build's release slot of it must hold
         uintptr_t   thunkTo;     // 0 unless that slot points at a jmp
     };
 
@@ -99,13 +102,25 @@ namespace
         uintptr_t   teleportCall2;
         OtherRelease others[2];    // zero where they were never derived
         uintptr_t   catchTick;     // the catch component's tick, the watchdog's own function
+        uintptr_t   releaseSlot;   // the vtable slot the character control release is in
+        const uint8_t* teleportHead; // the teleport handler's first 15 bytes
     };
 
-    // The releases, in order: slot 0x200 of the server and common
-    // CharacterControl components, called by the teleport handler once the
-    // player has been moved; the client's own copy of that function, reached
-    // through a thunk, whose absence is what made the outlaw arrive lying on
-    // the ground when only the server's was patched; a client state
+    // mov rax,rsp / mov [rax+10],rbx / mov [rax+18],rsi / mov [rax+20],rdi,
+    // the teleport handler's up to 1.0.0.2976.
+    const uint8_t kTeleportHead[15] = { 0x48, 0x8B, 0xC4, 0x48, 0x89, 0x58, 0x10, 0x48,
+                                        0x89, 0x70, 0x18, 0x48, 0x89, 0x78, 0x20 };
+    // mov [rsp+10],rbx / mov [rsp+18],r8 / mov [rsp+8],rcx, its prologue on
+    // 1.0.0.3392, which keeps the moved actor in its home slot instead of r13.
+    const uint8_t kTeleportHead3392[15] = { 0x48, 0x89, 0x5C, 0x24, 0x10, 0x4C, 0x89, 0x44,
+                                            0x24, 0x18, 0x48, 0x89, 0x4C, 0x24, 0x08 };
+
+    // The releases, in order: the release slot (0x200, or 0x1F8 from
+    // 1.0.0.3392) of the server and common CharacterControl components,
+    // called by the teleport handler once the player has been moved; the
+    // client's own copy of that function, reached through a thunk, whose
+    // absence is what made the outlaw arrive lying on the ground when only
+    // the server's was patched; a client state
     // transition that is in no vtable and fires a second after the confirm;
     // and the watchdog on the catch component itself, which runs about six
     // times a second on every catch in the world and drops one the carry
@@ -113,6 +128,23 @@ namespace
     // test rather than the `je` below it: with something actually held, the
     // `jne` in between jumps past that `je` and never reads it.
     const Build kBuilds[] = {
+        {
+            "1.0.0.3392", 0x22656B0,
+            {
+                { "keepcatch", 0x250FDD4, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x250FDF3, 0x250FDB4,
+                  kTeleportGuard, 16, 0x5EDD4B8, 0x250FD80, 0 },
+                { "keepcatch_client", 0x967143F, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x967145E, 0x967141F,
+                  kTeleportGuard, 16, 0x5934850, 0x9441D0, 0x96713E0 },
+                { "keepcatch_state", 0x178393D, { 0x74, 0x20 }, { 0xEB, 0x20 }, 0x178395A, 0x178391B,
+                  kTeleportGuard, 16, 0, 0, 0 },
+                { "keepcatch_watchdog", 0x22668D8, { 0x85, 0xFF }, { 0xEB, 0x44 }, 0x2266919, 0x22668D8,
+                  kWatchdogGuard, 8, 0, 0, 0 },
+            },
+            0xC91E0F0, 0x2136620, 0x2A5274C,
+            0x2E60CA0, 0x2E61A4A, 0x2E6201C,
+            { { "the release in +0x1783CE0", 0x17841A3 }, { "the release in +0x2279DA0", 0x2279F56 } },
+            0x2266850, 0x1F8, kTeleportHead3392,
+        },
         {
             "1.0.0.2976", 0x20AD400,
             {
@@ -128,7 +160,7 @@ namespace
             0xDD9D1E0, 0x1F53D50, 0x28181E0,
             0x2BC96C0, 0x2BCA5DD, 0x2BCAB80,
             { { "the release in +0x156F550", 0x156F9F5 }, { "the release in +0x20C0610", 0x20C07C6 } },
-            0x20AE5A0,
+            0x20AE5A0, 0x200, kTeleportHead,
         },
         {
             "1.0.0.2949", 0x20AD3B0,
@@ -144,7 +176,7 @@ namespace
             },
             0xDD526C0, 0x1F53D20, 0x2818170,
             0x2BC9650, 0x2BCA56D, 0x2BCAB10,
-            {}, 0x20AE550,
+            {}, 0x20AE550, 0x200, kTeleportHead,
         },
         {
             "1.0.0.2944", 0x20AD3A0,
@@ -160,7 +192,7 @@ namespace
             },
             0xE1478D0, 0x1F53D10, 0x2818160,
             0x2BC9640, 0x2BCA55D, 0x2BCAB00,
-            {}, 0x20AE540,
+            {}, 0x20AE540, 0x200, kTeleportHead,
         },
     };
 
@@ -181,7 +213,7 @@ namespace
     // True when every address of one release is where that build says. `loud`
     // is off while builds are being tried, so a build that is simply not the
     // one installed does not fill the log with its misses.
-    bool ReleaseChecks(const Release& r, uintptr_t catchUpdate, bool loud)
+    bool ReleaseChecks(const Release& r, uintptr_t catchUpdate, uintptr_t slotOff, bool loud)
     {
         const uintptr_t base = bp::mem::Game().base;
         const uintptr_t target = BranchTarget(r.call, 0xE8);
@@ -212,11 +244,12 @@ namespace
         if (r.vtable)
         {
             uint64_t slot = 0;
-            if (!bp::mem::Read64(base + r.vtable + 0x200, &slot) || slot != base + r.slotTarget)
+            if (!bp::mem::Read64(base + r.vtable + slotOff, &slot) || slot != base + r.slotTarget)
             {
                 if (loud)
-                    LOG_ERR("[%s] slot 0x200 of the vtable at +0x%llX is 0x%llX and not +0x%llX; nothing written",
-                            r.label, static_cast<unsigned long long>(r.vtable),
+                    LOG_ERR("[%s] slot 0x%llX of the vtable at +0x%llX is 0x%llX and not +0x%llX; nothing written",
+                            r.label, static_cast<unsigned long long>(slotOff),
+                            static_cast<unsigned long long>(r.vtable),
                             static_cast<unsigned long long>(slot), static_cast<unsigned long long>(r.slotTarget));
                 return false;
             }
@@ -234,16 +267,12 @@ namespace
 
     // mov [rsp+8],rbx / mov eax,[rcx+0x1c], the holder check's first bytes.
     const uint8_t kHolderHead[9] = { 0x48, 0x89, 0x5C, 0x24, 0x08, 0x44, 0x8B, 0x41, 0x1C };
-    // mov rax,rsp / mov [rax+10],rbx / mov [rax+18],rsi / mov [rax+20],rdi,
-    // the teleport handler's.
-    const uint8_t kTeleportHead[15] = { 0x48, 0x8B, 0xC4, 0x48, 0x89, 0x58, 0x10, 0x48,
-                                        0x89, 0x70, 0x18, 0x48, 0x89, 0x78, 0x20 };
 
     bool BuildChecks(const Build& bld, bool loud)
     {
         const uintptr_t base = bp::mem::Game().base;
         for (const Release& r : bld.releases)
-            if (!ReleaseChecks(r, bld.catchUpdate, loud)) return false;
+            if (!ReleaseChecks(r, bld.catchUpdate, bld.releaseSlot, loud)) return false;
 
         uint8_t head[15] = {};
         if (!bp::mem::ReadBytes(base + bld.holderCheck, head, 9) || memcmp(head, kHolderHead, 9) != 0)
@@ -259,7 +288,7 @@ namespace
             if (loud) LOG_ERR("[keepcarried] the sweep no longer reaches the holder check through its thunk");
             return false;
         }
-        if (!bp::mem::ReadBytes(base + bld.teleport, head, 15) || memcmp(head, kTeleportHead, 15) != 0)
+        if (!bp::mem::ReadBytes(base + bld.teleport, head, 15) || memcmp(head, bld.teleportHead, 15) != 0)
         {
             if (loud)
                 LOG_ERR("[teleport] +0x%llX does not start the way the map teleport handler does",
@@ -996,8 +1025,9 @@ namespace
     TeleportFn g_teleportOrig = nullptr;
 
     // Takes eight arguments and passes eight on. The handler reads at least
-    // six (its fifth and sixth come off the stack at [rbp+0x130] and
-    // [rbp+0x138]), and a detour that declared four would hand the original
+    // six (its fifth and sixth come off the stack, at [rbp+0x130] and
+    // [rbp+0x138] up to 1.0.0.2976, and the fifth at [rbp+0xE0] on
+    // 1.0.0.3392), and a detour that declared four would hand the original
     // whatever happened to be in its own frame for the rest. The extra two
     // are read from the caller's frame and passed back unchanged.
     uint64_t TeleportDetour(uint64_t a, uint64_t b, uint64_t actor, uint64_t d,
