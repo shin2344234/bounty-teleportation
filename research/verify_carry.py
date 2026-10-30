@@ -15,7 +15,9 @@ control release from vtable slot 0x200 to 0x1F8 and changed the teleport
 handler's prologue; patch-dlc\work\bounty-teleportation\3392 has the scripts
 that found its addresses. The 1.0.0.3424 hotfix of 30 October moved them all
 again; patch-dlc\work\bounty-teleportation\3424\compare.py pairs each
-function with its 3392 counterpart.
+function with its 3392 counterpart. 1.0.0.3446 moved them again and calls
+the holder check straight from the sweep, with no thunk in between, so its
+thunk is None; patch-dlc\work\bounty-teleportation\3446 has the scripts.
 """
 import sys, struct
 sys.path.insert(0, r"C:\working\cd mods\No more flight restrictions\private\research")
@@ -38,6 +40,18 @@ TICK_HEAD      = "48 89 5C 24 08 48 89 6C 24 18 48 89 74 24 20 57 41 56 41 57 48
 # the watchdog release and is where 1.0.8 makes a skipped release again, then
 # the vtable slot the release is in and the handler's first 15 bytes.
 BUILDS = {
+    "1.0.0.3446": dict(
+        catch_update=0x2267AA0,
+        releases=[
+            ("keepcatch",          0x2512214, "74 22", 0x25121F4, TELEPORT_GUARD, 0x2512233, 0x5EE15C8, 0x25121C0, None),
+            ("keepcatch_client",   0x9536C44, "74 22", 0x9536C24, TELEPORT_GUARD, 0x9536C63, 0x59388D0, 0x944A30, 0x9536BF0),
+            ("keepcatch_state",    0x178561D, "74 20", 0x17855FB, TELEPORT_GUARD, 0x178563A, None, None, None),
+            ("keepcatch_watchdog", 0x2268CC8, "85 FF", 0x2268CC8, WATCHDOG_GUARD, 0x2268D09, None, None, None),
+        ],
+        holder=0x21388B0, thunk=None, sweep=0x2A5505C,
+        teleport=0x2E63DF0, calls=(0x2E64B9A, 0x2E6516C),
+        tick=0x2268C40, slot=0x1F8, teleport_head=TELEPORT_HEAD_3392,
+    ),
     "1.0.0.3424": dict(
         catch_update=0x22668F0,
         releases=[
@@ -135,10 +149,13 @@ def check_build(name, spec, loud):
             want(f"{label} thunk", f"+0x{t:X}" if t else "not a jmp", f"+0x{thunk:X}")
 
     want("holder check prologue", hexs(spec["holder"], 9), HOLDER_HEAD)
-    t = rel32(spec["thunk"], 0xE9)
-    want("thunk jumps to the check", f"+0x{t:X}" if t else "not a jmp", f"+0x{spec['holder']:X}")
+    if spec["thunk"] is not None:
+        t = rel32(spec["thunk"], 0xE9)
+        want("thunk jumps to the check", f"+0x{t:X}" if t else "not a jmp", f"+0x{spec['holder']:X}")
+    via = spec["thunk"] if spec["thunk"] is not None else spec["holder"]
     t = rel32(spec["sweep"], 0xE8)
-    want("sweep calls the thunk", f"+0x{t:X}" if t else "not a call", f"+0x{spec['thunk']:X}")
+    want("sweep calls the thunk" if spec["thunk"] is not None else "sweep calls the check",
+         f"+0x{t:X}" if t else "not a call", f"+0x{via:X}")
 
     want("teleport prologue", hexs(spec["teleport"], 15), spec["teleport_head"])
     for c in spec["calls"]:

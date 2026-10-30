@@ -2,8 +2,8 @@
 
 Fast travel while carrying a bounty target. He rides along on your back and is
 still worth turning in at the other end. For Crimson Desert exe 1.0.0.2944,
-1.0.0.2949, 1.0.0.2976, 1.0.0.3392 or 1.0.0.3424. The last two are the DLC
-update and its hotfix.
+1.0.0.2949, 1.0.0.2976, 1.0.0.3392, 1.0.0.3424 or 1.0.0.3446. The last three
+are the DLC update and its two hotfixes.
 
 In the unmodded game the teleport happens and he does not. You arrive alone.
 
@@ -61,17 +61,18 @@ issue.
 
 Eight addresses are written or hooked and each is checked against the bytes
 that should be there first. The plugin carries a set of them for each game
-build it knows, 1.0.0.2944, 1.0.0.2949, 1.0.0.2976, 1.0.0.3392 and 1.0.0.3424, and uses
-whichever the game matches. On a game update matching none of them it writes
-nothing, hooks nothing, and the log says so. Everything it wrote is put back if it is
-unloaded.
+build it knows, 1.0.0.2944, 1.0.0.2949, 1.0.0.2976, 1.0.0.3392, 1.0.0.3424 and
+1.0.0.3446, and uses whichever the game matches. On a game update matching none
+of them it writes nothing, hooks nothing, and the log says so. Everything it
+wrote is put back if it is unloaded.
 
 The 21 September 2026 game patch moved every one of those addresses, which is
 why 1.0.0 and 1.0.1 stopped doing anything on it. The 23 September patch moved
 them again, and 1.0.2 stops the same way on it. The DLC update of 29 October,
 exe 1.0.0.3392, moved them all once more, and 1.0.9 stops on that one. The
-hotfix of 30 October, exe 1.0.0.3424, moved them again. 1.0.10 has a set for
-each of those two.
+hotfix of 30 October, exe 1.0.0.3424, moved them again, and a second hotfix
+the same day, exe 1.0.0.3446, moved them once more. 1.0.10 has a set for 3392
+and 3424 and stops on 3446. 1.0.11 adds a set for 3446.
 
 Do not run this alongside Bounty Probe, the research plugin it came out of.
 They patch the same bytes and hook the same function, and the second one
@@ -123,13 +124,14 @@ tested in play.
 
 ## The DLC update
 
-1.0.10 runs on the DLC update, exe 1.0.0.3392, and on its hotfix,
+1.0.10 runs on the DLC update, exe 1.0.0.3392, and on its first hotfix,
 1.0.0.3424. Seth carried an outlaw through a map teleport as Kliff on each.
-Damiane, Oongka and the trimmer's KLIFF TELEPORT have not been played on
-either yet, so a log from any of them helps. The DLC also added a new way for
+1.0.11 adds the second hotfix, 1.0.0.3446, which has not been played yet.
+Damiane, Oongka and the trimmer's KLIFF TELEPORT have not been played on any
+of them, so a log from any of those helps. The DLC also added a new way for
 the game to let go of a carry, which this mod leaves alone. If your log has a
-`[release]` line returning to +0x227A2B8 or +0x227B4F8, send it, because what
-sets that one off is not known yet.
+`[release]` line returning to +0x227A2B8, +0x227B4F8 or +0x227C6A8, send it,
+because what sets that one off is not known yet.
 
 ## Antivirus
 

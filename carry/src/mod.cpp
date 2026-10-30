@@ -50,7 +50,9 @@ namespace
     // character control release in vtable slot 0x1F8 where it had been in
     // 0x200, and rewrote the teleport handler's prologue, so the slot and the
     // prologue are per build too. The 30 October hotfix, 1.0.0.3424, moved
-    // them all again and changed nothing else this plugin reads. Every build is listed, and the one whose
+    // them all again and changed nothing else this plugin reads. 1.0.0.3446
+    // moved them once more and dropped the thunk in front of the holder
+    // check, so the sweep calls it directly there. Every build is listed, and the one whose
     // addresses all check out is the one used. research\derive_2949.py is how the later sets were
     // found: every one of them from a byte pattern or from a reference to
     // something already found, never from an offset against the old build.
@@ -96,8 +98,8 @@ namespace
         uintptr_t   catchUpdate;   // where every release below must call
         Release     releases[kReleaseCount];
         uintptr_t   holderCheck;   // the departure sweep's "does anyone hold it"
-        uintptr_t   holderThunk;   // the jmp that reaches it
-        uintptr_t   sweepCall;     // the sweep's call to that thunk
+        uintptr_t   holderThunk;   // the jmp that reaches it, 0 where the sweep calls it directly
+        uintptr_t   sweepCall;     // the sweep's call to that thunk, or to the check itself
         uintptr_t   teleport;      // the map teleport handler
         uintptr_t   teleportCall1; // its two callers, both in the message handler
         uintptr_t   teleportCall2;
@@ -129,6 +131,23 @@ namespace
     // test rather than the `je` below it: with something actually held, the
     // `jne` in between jumps past that `je` and never reads it.
     const Build kBuilds[] = {
+        {
+            "1.0.0.3446", 0x2267AA0,
+            {
+                { "keepcatch", 0x2512214, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x2512233, 0x25121F4,
+                  kTeleportGuard, 16, 0x5EE15C8, 0x25121C0, 0 },
+                { "keepcatch_client", 0x9536C44, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x9536C63, 0x9536C24,
+                  kTeleportGuard, 16, 0x59388D0, 0x944A30, 0x9536BF0 },
+                { "keepcatch_state", 0x178561D, { 0x74, 0x20 }, { 0xEB, 0x20 }, 0x178563A, 0x17855FB,
+                  kTeleportGuard, 16, 0, 0, 0 },
+                { "keepcatch_watchdog", 0x2268CC8, { 0x85, 0xFF }, { 0xEB, 0x44 }, 0x2268D09, 0x2268CC8,
+                  kWatchdogGuard, 8, 0, 0, 0 },
+            },
+            0x21388B0, 0, 0x2A5505C,
+            0x2E63DF0, 0x2E64B9A, 0x2E6516C,
+            { { "the release in +0x17859C0", 0x1785E83 }, { "the release in +0x227C190", 0x227C346 } },
+            0x2268C40, 0x1F8, kTeleportHead3392,
+        },
         {
             "1.0.0.3424", 0x22668F0,
             {
@@ -300,10 +319,13 @@ namespace
                         static_cast<unsigned long long>(bld.holderCheck));
             return false;
         }
-        if (BranchTarget(bld.holderThunk, 0xE9) != bld.holderCheck ||
-            BranchTarget(bld.sweepCall, 0xE8) != bld.holderThunk)
+        const uintptr_t sweepTo = bld.holderThunk ? bld.holderThunk : bld.holderCheck;
+        if ((bld.holderThunk && BranchTarget(bld.holderThunk, 0xE9) != bld.holderCheck) ||
+            BranchTarget(bld.sweepCall, 0xE8) != sweepTo)
         {
-            if (loud) LOG_ERR("[keepcarried] the sweep no longer reaches the holder check through its thunk");
+            if (loud)
+                LOG_ERR(bld.holderThunk ? "[keepcarried] the sweep no longer reaches the holder check through its thunk"
+                                        : "[keepcarried] the sweep no longer calls the holder check");
             return false;
         }
         if (!bp::mem::ReadBytes(base + bld.teleport, head, 15) || memcmp(head, bld.teleportHead, 15) != 0)
@@ -1112,7 +1134,8 @@ namespace
     //
     // Leaving a field tears down every actor the player's session spawned in
     // it, and a caught outlaw is one of those. The sweep spares an actor
-    // somebody else still holds, and the question is asked through a thunk.
+    // somebody else still holds, and up to 1.0.0.3424 the question is asked
+    // through a thunk.
     // KeepCarried answers yes for an actor whose catch component names a
     // carrier. The addresses were checked when the build was chosen.
     void InstallKeepCarried()
