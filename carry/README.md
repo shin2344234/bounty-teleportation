@@ -70,8 +70,8 @@ The 21 September 2026 game patch moved every one of those addresses, which is
 why 1.0.0 and 1.0.1 stopped doing anything on it. The 23 September patch moved
 them again, and 1.0.2 stops the same way on it. The DLC update of 29 October,
 exe 1.0.0.3392, moved them all once more, and 1.0.9 stops on that one. The
-hotfix of 30 October, exe 1.0.0.3424, moved them again, and 1.0.10-test1
-stops on it.
+hotfix of 30 October, exe 1.0.0.3424, moved them again. 1.0.10 has a set for
+each of those two.
 
 Do not run this alongside Bounty Probe, the research plugin it came out of.
 They patch the same bytes and hook the same function, and the second one
@@ -120,6 +120,16 @@ learns the body from each map teleport and holds for it too. The first trimmed
 teleport of a session as Damiane or Oongka can still lose the bounty, since
 nothing has been learned yet. If it is left behind, send the log. 1.0.9 was not
 tested in play.
+
+## The DLC update
+
+1.0.10 runs on the DLC update, exe 1.0.0.3392, and on its hotfix,
+1.0.0.3424. Seth carried an outlaw through a map teleport as Kliff on each.
+Damiane, Oongka and the trimmer's KLIFF TELEPORT have not been played on
+either yet, so a log from any of them helps. The DLC also added a new way for
+the game to let go of a carry, which this mod leaves alone. If your log has a
+`[release]` line returning to +0x227A2B8 or +0x227B4F8, send it, because what
+sets that one off is not known yet.
 
 ## Antivirus
 

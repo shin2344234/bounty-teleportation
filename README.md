@@ -5,8 +5,9 @@ on your back and is still worth turning in at the other end. Works on 2.03.00
 exe 1.0.0.2944, on the 1.0.0.2949 and 1.0.0.2976 patches, on 1.0.0.3392,
 the DLC update of 29 October 2026, and on 1.0.0.3424, the hotfix of 30
 October. Before release, Seth carried an outlaw through a map teleport with
-1.0.3 and with 1.0.4 on 1.0.0.2976, and did it again with the 3392 table on
-1.0.0.3392. 1.0.5 went out untested and a player
+1.0.3 and with 1.0.4 on 1.0.0.2976, did it again with the 3392 table on
+1.0.0.3392, and once more with 1.0.10 on 1.0.0.3424. 1.0.5 went out untested
+and a player
 confirmed it the same day. The fix in 1.0.6 went to one player as a test build
 first, and they carried their bounty through with it. 1.0.1, 1.0.2, 1.0.7,
 1.0.8 and 1.0.9 went out untested.
@@ -46,9 +47,9 @@ their checksums.
 Eight addresses, each checked against the bytes that should be there before
 anything is written, and all of it put back if the plugin is unloaded. A game
 update moves them, as the 21 September 2026 patch to exe 1.0.0.2949 moved
-every one, the 23 September patch to 1.0.0.2976 moved them again, and the DLC
-update of 29 October to 1.0.0.3392 moved them a third time. The
-plugin holds a table per game build and uses the one whose addresses all check
+every one, the 23 September patch to 1.0.0.2976 moved them again, the DLC
+update of 29 October to 1.0.0.3392 moved them a third time, and its hotfix
+the next day to 1.0.0.3424 moved them a fourth. The plugin holds a table per game build and uses the one whose addresses all check
 out. Matching none, it writes nothing and names the newest build's failed
 check in its log.
 
@@ -212,6 +213,10 @@ code moved. The client release and the holder check each load one constant
 differently. The client release's 8 is read from a table on 3392 and written
 inline on 3424, and the holder check's 0xFFFFFFFF goes the other way. The
 blocks the plugin patches or hooks in those two are byte for byte the same.
+
+Seth played the signed 1.0.10 on 3424 on 30 October as Kliff. The sweep kept
+the outlaw, asked from +0x2A539E1, and the releases went back to the game's
+own 24 seconds later. The same things are unplayed on 3424 as on 3392.
 
 ## Antivirus
 
