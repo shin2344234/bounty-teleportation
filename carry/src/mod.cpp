@@ -49,7 +49,8 @@ namespace
     // 0x18280. The DLC on 29 October, 1.0.0.3392, moved all of them, put the
     // character control release in vtable slot 0x1F8 where it had been in
     // 0x200, and rewrote the teleport handler's prologue, so the slot and the
-    // prologue are per build too. Every build is listed, and the one whose
+    // prologue are per build too. The 30 October hotfix, 1.0.0.3424, moved
+    // them all again and changed nothing else this plugin reads. Every build is listed, and the one whose
     // addresses all check out is the one used. research\derive_2949.py is how the later sets were
     // found: every one of them from a byte pattern or from a reference to
     // something already found, never from an offset against the old build.
@@ -128,6 +129,23 @@ namespace
     // test rather than the `je` below it: with something actually held, the
     // `jne` in between jumps past that `je` and never reads it.
     const Build kBuilds[] = {
+        {
+            "1.0.0.3424", 0x22668F0,
+            {
+                { "keepcatch", 0x2511064, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x2511083, 0x2511044,
+                  kTeleportGuard, 16, 0x5EDF4C8, 0x2511010, 0 },
+                { "keepcatch_client", 0x97BF134, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x97BF153, 0x97BF114,
+                  kTeleportGuard, 16, 0x5936838, 0x944A00, 0x97BF0E0 },
+                { "keepcatch_state", 0x1784A6D, { 0x74, 0x20 }, { 0xEB, 0x20 }, 0x1784A8A, 0x1784A4B,
+                  kTeleportGuard, 16, 0, 0, 0 },
+                { "keepcatch_watchdog", 0x2267B18, { 0x85, 0xFF }, { 0xEB, 0x44 }, 0x2267B59, 0x2267B18,
+                  kWatchdogGuard, 8, 0, 0, 0 },
+            },
+            0xC9F4A10, 0x2137880, 0x2A539DC,
+            0x2E624A0, 0x2E6324A, 0x2E6381C,
+            { { "the release in +0x1784E10", 0x17852D3 }, { "the release in +0x227AFE0", 0x227B196 } },
+            0x2267A90, 0x1F8, kTeleportHead3392,
+        },
         {
             "1.0.0.3392", 0x22656B0,
             {

@@ -1,4 +1,4 @@
-"""Check every address Bounty Teleportation writes to, straight off the exe on
+r"""Check every address Bounty Teleportation writes to, straight off the exe on
 disk, for each game build the plugin knows.
 
 The probe has SitesTest for its hooking core; the lean plugin has no logic of
@@ -12,8 +12,10 @@ and 1.0.0.2976 did on 23 September, `derive_2949.py` finds the new addresses
 and `derive_2976b.py` names the class behind each vtable and picks out the
 sweep's call. The DLC build 1.0.0.3392 of 29 October moved the character
 control release from vtable slot 0x200 to 0x1F8 and changed the teleport
-handler's prologue; patch-dlc\workounty-teleportation92 has the scripts
-that found its addresses.
+handler's prologue; patch-dlc\work\bounty-teleportation\3392 has the scripts
+that found its addresses. The 1.0.0.3424 hotfix of 30 October moved them all
+again; patch-dlc\work\bounty-teleportation\3424\compare.py pairs each
+function with its 3392 counterpart.
 """
 import sys, struct
 sys.path.insert(0, r"C:\working\cd mods\No more flight restrictions\private\research")
@@ -36,6 +38,18 @@ TICK_HEAD      = "48 89 5C 24 08 48 89 6C 24 18 48 89 74 24 20 57 41 56 41 57 48
 # the watchdog release and is where 1.0.8 makes a skipped release again, then
 # the vtable slot the release is in and the handler's first 15 bytes.
 BUILDS = {
+    "1.0.0.3424": dict(
+        catch_update=0x22668F0,
+        releases=[
+            ("keepcatch",          0x2511064, "74 22", 0x2511044, TELEPORT_GUARD, 0x2511083, 0x5EDF4C8, 0x2511010, None),
+            ("keepcatch_client",   0x97BF134, "74 22", 0x97BF114, TELEPORT_GUARD, 0x97BF153, 0x5936838, 0x944A00, 0x97BF0E0),
+            ("keepcatch_state",    0x1784A6D, "74 20", 0x1784A4B, TELEPORT_GUARD, 0x1784A8A, None, None, None),
+            ("keepcatch_watchdog", 0x2267B18, "85 FF", 0x2267B18, WATCHDOG_GUARD, 0x2267B59, None, None, None),
+        ],
+        holder=0xC9F4A10, thunk=0x2137880, sweep=0x2A539DC,
+        teleport=0x2E624A0, calls=(0x2E6324A, 0x2E6381C),
+        tick=0x2267A90, slot=0x1F8, teleport_head=TELEPORT_HEAD_3392,
+    ),
     "1.0.0.3392": dict(
         catch_update=0x22656B0,
         releases=[
