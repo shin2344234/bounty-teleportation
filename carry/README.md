@@ -124,14 +124,12 @@ tested in play.
 
 ## The DLC update
 
-1.0.10 runs on the DLC update, exe 1.0.0.3392, and on its first hotfix,
-1.0.0.3424. Seth carried an outlaw through a map teleport as Kliff on each.
-1.0.11 adds the second hotfix, 1.0.0.3446, which has not been played yet.
-Damiane, Oongka and the trimmer's KLIFF TELEPORT have not been played on any
-of them, so a log from any of those helps. The DLC also added a new way for
-the game to let go of a carry, which this mod leaves alone. If your log has a
-`[release]` line returning to +0x227A2B8, +0x227B4F8 or +0x227C6A8, send it,
-because what sets that one off is not known yet.
+1.0.11 runs on the DLC update, exe 1.0.0.3392, and on both of its hotfixes,
+1.0.0.3424 and 1.0.0.3446. Seth carried an outlaw through a map teleport as
+Kliff on each. The DLC also added a new way for the game to let go of a
+carry, which this mod leaves alone. If your log has a `[release]` line
+returning to +0x227A2B8, +0x227B4F8 or +0x227C6A8, send it, because what sets
+that one off is not known yet.
 
 ## Antivirus
 

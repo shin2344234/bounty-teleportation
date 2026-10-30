@@ -5,10 +5,10 @@ on your back and is still worth turning in at the other end. Works on 2.03.00
 exe 1.0.0.2944, on the 1.0.0.2949 and 1.0.0.2976 patches, on 1.0.0.3392,
 the DLC update of 29 October 2026, and on 1.0.0.3424 and 1.0.0.3446, the two
 hotfixes of 30 October. Before release, Seth carried an outlaw through a map
-teleport with 1.0.3 and with 1.0.4 on 1.0.0.2976, did it again with the 3392 table on
-1.0.0.3392, and once more with 1.0.10 on 1.0.0.3424. 1.0.5 went out untested
-and a player
-confirmed it the same day. The fix in 1.0.6 went to one player as a test build
+teleport with 1.0.3 and with 1.0.4 on 1.0.0.2976, did it again with the 3392
+table on 1.0.0.3392, with 1.0.10 on 1.0.0.3424, and with a 1.0.11 test build
+on 1.0.0.3446. 1.0.5 went out untested and a player confirmed it the same
+day. The fix in 1.0.6 went to one player as a test build
 first, and they carried their bounty through with it. 1.0.1, 1.0.2, 1.0.7,
 1.0.8 and 1.0.9 went out untested.
 
@@ -231,7 +231,9 @@ function with its 3424 counterpart. Eight are the same code moved. In four of
 the other five only a jump table at the end differs, and every entry in it
 moved by the function's own shift. The fifth is the holder check, which writes
 its 0xFFFFFFFF inline where 3424 loaded it from a global, and is otherwise
-the same. Nothing has been played on 3446 yet.
+the same. Seth played the 1.0.11 test build on 3446 that afternoon as Kliff.
+The sweep kept the outlaw, asked from +0x2A55061, and the releases went back to
+the game's own 14 seconds later.
 
 ## Antivirus
 
