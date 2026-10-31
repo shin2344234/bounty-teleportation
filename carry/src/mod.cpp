@@ -52,7 +52,8 @@ namespace
     // prologue are per build too. The 30 October hotfix, 1.0.0.3424, moved
     // them all again and changed nothing else this plugin reads. 1.0.0.3446
     // moved them once more and dropped the thunk in front of the holder
-    // check, so the sweep calls it directly there. Every build is listed, and the one whose
+    // check, so the sweep calls it directly there. The 31 October patch,
+    // 1.0.0.3460, moved them all again and changed none of that code. Every build is listed, and the one whose
     // addresses all check out is the one used. research\derive_2949.py is how the later sets were
     // found: every one of them from a byte pattern or from a reference to
     // something already found, never from an offset against the old build.
@@ -131,6 +132,23 @@ namespace
     // test rather than the `je` below it: with something actually held, the
     // `jne` in between jumps past that `je` and never reads it.
     const Build kBuilds[] = {
+        {
+            "1.0.0.3460", 0x226AE60,
+            {
+                { "keepcatch", 0x2515994, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x25159B3, 0x2515974,
+                  kTeleportGuard, 16, 0x5EE57C8, 0x2515940, 0 },
+                { "keepcatch_client", 0x94CE5A4, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x94CE5C3, 0x94CE584,
+                  kTeleportGuard, 16, 0x593C8E0, 0x945570, 0x94CE550 },
+                { "keepcatch_state", 0x178872D, { 0x74, 0x20 }, { 0xEB, 0x20 }, 0x178874A, 0x178870B,
+                  kTeleportGuard, 16, 0, 0, 0 },
+                { "keepcatch_watchdog", 0x226C088, { 0x85, 0xFF }, { 0xEB, 0x44 }, 0x226C0C9, 0x226C088,
+                  kWatchdogGuard, 8, 0, 0, 0 },
+            },
+            0x213BC80, 0, 0x2A5867C,
+            0x2E67940, 0x2E686EA, 0x2E68CBC,
+            { { "the release in +0x1788AD0", 0x1788F93 }, { "the release in +0x227F550", 0x227F706 } },
+            0x226C000, 0x1F8, kTeleportHead3392,
+        },
         {
             "1.0.0.3446", 0x2267AA0,
             {
