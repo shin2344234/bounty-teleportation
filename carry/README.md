@@ -2,8 +2,9 @@
 
 Fast travel while carrying a bounty target. He rides along on your back and is
 still worth turning in at the other end. For Crimson Desert exe 1.0.0.2944,
-1.0.0.2949, 1.0.0.2976, 1.0.0.3392, 1.0.0.3424 or 1.0.0.3446. The last three
-are the DLC update and its two hotfixes.
+1.0.0.2949, 1.0.0.2976, 1.0.0.3392, 1.0.0.3424, 1.0.0.3446 or 1.0.0.3460.
+3392 is the DLC update and 3424 and 3446 its hotfixes. 3460 came out on 31
+October.
 
 In the unmodded game the teleport happens and he does not. You arrive alone.
 
@@ -61,8 +62,8 @@ issue.
 
 Eight addresses are written or hooked and each is checked against the bytes
 that should be there first. The plugin carries a set of them for each game
-build it knows, 1.0.0.2944, 1.0.0.2949, 1.0.0.2976, 1.0.0.3392, 1.0.0.3424 and
-1.0.0.3446, and uses whichever the game matches. On a game update matching none
+build it knows, 1.0.0.2944, 1.0.0.2949, 1.0.0.2976, 1.0.0.3392, 1.0.0.3424,
+1.0.0.3446 and 1.0.0.3460, and uses whichever the game matches. On a game update matching none
 of them it writes nothing, hooks nothing, and the log says so. Everything it
 wrote is put back if it is unloaded.
 
@@ -72,7 +73,9 @@ them again, and 1.0.2 stops the same way on it. The DLC update of 29 October,
 exe 1.0.0.3392, moved them all once more, and 1.0.9 stops on that one. The
 hotfix of 30 October, exe 1.0.0.3424, moved them again, and a second hotfix
 the same day, exe 1.0.0.3446, moved them once more. 1.0.10 has a set for 3392
-and 3424 and stops on 3446. 1.0.11 adds a set for 3446.
+and 3424 and stops on 3446. 1.0.11 adds a set for 3446. The patch of 31
+October, exe 1.0.0.3460, moved them all again without changing the code
+behind them. 1.0.11 stops on it, and 1.0.12 adds a set for 3460.
 
 Do not run this alongside Bounty Probe, the research plugin it came out of.
 They patch the same bytes and hook the same function, and the second one
@@ -126,10 +129,11 @@ tested in play.
 
 1.0.11 runs on the DLC update, exe 1.0.0.3392, and on both of its hotfixes,
 1.0.0.3424 and 1.0.0.3446. Seth carried an outlaw through a map teleport as
-Kliff on each. The DLC also added a new way for the game to let go of a
-carry, which this mod leaves alone. If your log has a `[release]` line
-returning to +0x227A2B8, +0x227B4F8 or +0x227C6A8, send it, because what sets
-that one off is not known yet.
+Kliff on each. 1.0.12 adds the 31 October patch, 1.0.0.3460, and was not
+tested in play on it. The DLC also added a new way for the game to let go of
+a carry, which this mod leaves alone. If your log has a `[release]` line
+returning to +0x227A2B8, +0x227B4F8, +0x227C6A8 or +0x227FA68, send it,
+because what sets that one off is not known yet.
 
 ## Antivirus
 

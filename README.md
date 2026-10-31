@@ -3,14 +3,16 @@
 Fast travel while carrying a bounty target in Crimson Desert. He rides along
 on your back and is still worth turning in at the other end. Works on 2.03.00
 exe 1.0.0.2944, on the 1.0.0.2949 and 1.0.0.2976 patches, on 1.0.0.3392,
-the DLC update of 29 October 2026, and on 1.0.0.3424 and 1.0.0.3446, the two
-hotfixes of 30 October. Before release, Seth carried an outlaw through a map
+the DLC update of 29 October 2026, on 1.0.0.3424 and 1.0.0.3446, the two
+hotfixes of 30 October, and on 1.0.0.3460, the patch of 31 October. Before
+release, Seth carried an outlaw through a map
 teleport with 1.0.3 and with 1.0.4 on 1.0.0.2976, did it again with the 3392
 table on 1.0.0.3392, with 1.0.10 on 1.0.0.3424, and with a 1.0.11 test build
 on 1.0.0.3446. 1.0.5 went out untested and a player confirmed it the same
 day. The fix in 1.0.6 went to one player as a test build
 first, and they carried their bounty through with it. 1.0.1, 1.0.2, 1.0.7,
-1.0.8 and 1.0.9 went out untested.
+1.0.8 and 1.0.9 went out untested. 1.0.12, the first with the 3460 table,
+has not been played yet.
 
 Without it the teleport goes through and the outlaw does not. Two separate
 things remove him during the confirm: the teleport releases the catch, and
@@ -49,8 +51,8 @@ anything is written, and all of it put back if the plugin is unloaded. A game
 update moves them, as the 21 September 2026 patch to exe 1.0.0.2949 moved
 every one, the 23 September patch to 1.0.0.2976 moved them again, the DLC
 update of 29 October to 1.0.0.3392 moved them a third time, and the two
-hotfixes the next day, 1.0.0.3424 and 1.0.0.3446, moved them twice more. The
-plugin holds a table per game build and uses the one whose addresses all check
+hotfixes the next day, 1.0.0.3424 and 1.0.0.3446, moved them twice more, and
+the 31 October patch to 1.0.0.3460 moved them again. The plugin holds a table per game build and uses the one whose addresses all check
 out. Matching none, it writes nothing and names the newest build's failed
 check in its log.
 
@@ -196,7 +198,8 @@ build names the 15 bytes it checks there. `research\verify_carry.py` checks
 both per build and takes the path of an exe to read.
 
 The DLC also added a client docking release, at return address +0x227A2B8 on
-3392, +0x227B4F8 on 3424 and +0x227C6A8 on 3446. The plugin never skips it.
+3392, +0x227B4F8 on 3424, +0x227C6A8 on 3446 and +0x227FA68 on 3460. The
+plugin never skips it.
 What triggers it in play is not known yet, and a `[release]` line naming it is worth a report.
 
 Seth played the 3392 table on 29 October 2026 as Kliff. An outlaw came through
@@ -234,6 +237,17 @@ its 0xFFFFFFFF inline where 3424 loaded it from a global, and is otherwise
 the same. Seth played the 1.0.11 test build on 3446 that afternoon as Kliff.
 The sweep kept the outlaw, asked from +0x2A55061, and the releases went back to
 the game's own 14 seconds later.
+
+The patch of 31 October, exe 1.0.0.3460, moved every address again. Most moved
+up by 0x3110 to 0x3B50, and the client release moved 0x686A0 lower, still
+behind a thunk in vtable slot 0x1F8. The sweep still calls the holder check
+directly, the release slot is still 0x1F8, and the teleport handler still
+starts with the 3392 bytes. `patch-dlc\work\bounty-teleportation\3460\compare.py`
+pairs each function with its 3446 counterpart. Nine of the thirteen are the
+same code moved. In the other four, the catch update, the state release, the
+release in +0x227F550 and the docking release, only a jump table differs, and
+every entry in it moved by the function's own shift. 1.0.12 carries the 3460
+table and has not been played. On 3460 the sweep should ask from +0x2A58681.
 
 ## Antivirus
 
