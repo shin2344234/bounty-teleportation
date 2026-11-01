@@ -260,15 +260,16 @@ outlaw through the teleport, and the releases went back to the game's own
 
 ## Antivirus
 
-VirusTotal counts 1.0.12's loose plugin at 0/71, its DMM archive at 0/67 and
-the manual archive at 0/68. The plugin read 0/70 for 1.0.0, 0/71 for 1.0.1,
-and 0/71 for each of 1.0.3 to 1.0.11. 1.0.2's read 1/70, the one being Microsoft's
+VirusTotal counts 1.0.13's loose plugin at 0/71, its DMM archive at 0/68 and
+the manual archive at 0/67. The plugin read 0/70 for 1.0.0, 0/71 for 1.0.1,
+and 0/71 for each of 1.0.3 to 1.0.12. 1.0.2's read 1/70, the one being Microsoft's
 Trojan:Win32/Wacatac.B!ml, the label it gives a file its model dislikes rather
 than one it recognises. Desktop Defender found nothing in that file, and
 Microsoft passed the same plugin inside both 1.0.2 archives. Every release
 since has been clean, 1.0.4 to 1.0.7 with a third hook in them and 1.0.8
 with a fourth. 1.0.9 came back clean as well, and so did 1.0.10 to 1.0.12
 with their tables for the DLC, its hotfixes and the 31 October patch.
+1.0.13, built for the 1 November patch, is clean too.
 
 The plugin imports kernel32 and nothing else, reads and writes no registry key
 and no game file, and is signed under Microsoft's identity-verified chain as
