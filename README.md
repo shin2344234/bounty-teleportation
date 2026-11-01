@@ -4,7 +4,8 @@ Fast travel while carrying a bounty target in Crimson Desert. He rides along
 on your back and is still worth turning in at the other end. Works on 2.03.00
 exe 1.0.0.2944, on the 1.0.0.2949 and 1.0.0.2976 patches, on 1.0.0.3392,
 the DLC update of 29 October 2026, on 1.0.0.3424 and 1.0.0.3446, the two
-hotfixes of 30 October, and on 1.0.0.3460, the patch of 31 October. Before
+hotfixes of 30 October, on 1.0.0.3460, the patch of 31 October, and on
+1.0.0.3462, the patch of 1 November. Before
 release, Seth carried an outlaw through a map
 teleport with 1.0.3 and with 1.0.4 on 1.0.0.2976, did it again with the 3392
 table on 1.0.0.3392, with 1.0.10 on 1.0.0.3424, and with a 1.0.11 test build
@@ -12,7 +13,8 @@ on 1.0.0.3446. 1.0.5 went out untested and a player confirmed it the same
 day. The fix in 1.0.6 went to one player as a test build
 first, and they carried their bounty through with it. 1.0.1, 1.0.2, 1.0.7,
 1.0.8 and 1.0.9 went out untested. 1.0.12, the first with the 3460 table,
-has not been played yet.
+was never played on 3460. On 1 November Seth carried an outlaw through a
+teleport on 1.0.0.3462 with the build that became 1.0.13.
 
 Without it the teleport goes through and the outlaw does not. Two separate
 things remove him during the confirm: the teleport releases the catch, and
@@ -248,6 +250,13 @@ same code moved. In the other four, the catch update, the state release, the
 release in +0x227F550 and the docking release, only a jump table differs, and
 every entry in it moved by the function's own shift. 1.0.12 carries the 3460
 table and has not been played. On 3460 the sweep should ask from +0x2A58681.
+
+The patch of 1 November, exe 1.0.0.3462, moved the server and client
+releases, the sweep and the teleport handler, and left the rest where 3460
+had it, again with the same code. `patch-dlc\work\bounty-teleportation\3462`
+has the scripts. Seth played it that morning as Kliff. The sweep kept the
+outlaw through the teleport, and the releases went back to the game's own
+79 seconds later, when he was no longer carried.
 
 ## Antivirus
 
