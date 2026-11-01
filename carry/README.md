@@ -2,9 +2,9 @@
 
 Fast travel while carrying a bounty target. He rides along on your back and is
 still worth turning in at the other end. For Crimson Desert exe 1.0.0.2944,
-1.0.0.2949, 1.0.0.2976, 1.0.0.3392, 1.0.0.3424, 1.0.0.3446, 1.0.0.3460 or
-1.0.0.3462. 3392 is the DLC update and 3424 and 3446 its hotfixes. 3460 came
-out on 31 October and 3462 on 1 November.
+1.0.0.2949, 1.0.0.2976, 1.0.0.3392, 1.0.0.3424, 1.0.0.3446, 1.0.0.3460,
+1.0.0.3462 or 1.0.0.3479. 3392 is the DLC update and 3424 and 3446 its
+hotfixes. 3460 came out on 31 October, and 3462 and 3479 on 1 November.
 
 In the unmodded game the teleport happens and he does not. You arrive alone.
 
@@ -63,7 +63,7 @@ issue.
 Eight addresses are written or hooked and each is checked against the bytes
 that should be there first. The plugin carries a set of them for each game
 build it knows, 1.0.0.2944, 1.0.0.2949, 1.0.0.2976, 1.0.0.3392, 1.0.0.3424,
-1.0.0.3446, 1.0.0.3460 and 1.0.0.3462, and uses whichever the game matches. On a game update matching none
+1.0.0.3446, 1.0.0.3460, 1.0.0.3462 and 1.0.0.3479, and uses whichever the game matches. On a game update matching none
 of them it writes nothing, hooks nothing, and the log says so. Everything it
 wrote is put back if it is unloaded.
 
@@ -77,7 +77,8 @@ and 3424 and stops on 3446. 1.0.11 adds a set for 3446. The patch of 31
 October, exe 1.0.0.3460, moved them all again without changing the code
 behind them. 1.0.11 stops on it, and 1.0.12 adds a set for 3460. The patch
 of 1 November, exe 1.0.0.3462, moved four of them. 1.0.12 stops on it, and
-1.0.13 adds a set for 3462.
+1.0.13 adds a set for 3462. The second patch that day, exe 1.0.0.3479,
+moved all of them again. 1.0.13 stops on it, and 1.0.14 adds a set for 3479.
 
 Do not run this alongside Bounty Probe, the research plugin it came out of.
 They patch the same bytes and hook the same function, and the second one

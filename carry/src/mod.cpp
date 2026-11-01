@@ -56,7 +56,9 @@ namespace
     // 1.0.0.3460, moved them all again and changed none of that code. The
     // 1 November patch, 1.0.0.3462, moved the server and client releases, the
     // sweep and the teleport handler and left the rest where 3460 had it, again
-    // with the same code. Every build is listed, and the one whose
+    // with the same code. 1.0.0.3479, later the same day, moved the client
+    // release by 0x8FC80 and nearly everything else back by 0x50, and changed
+    // none of that code either. Every build is listed, and the one whose
     // addresses all check out is the one used. research\derive_2949.py is how the later sets were
     // found: every one of them from a byte pattern or from a reference to
     // something already found, never from an offset against the old build.
@@ -135,6 +137,23 @@ namespace
     // test rather than the `je` below it: with something actually held, the
     // `jne` in between jumps past that `je` and never reads it.
     const Build kBuilds[] = {
+        {
+            "1.0.0.3479", 0x226AE10,
+            {
+                { "keepcatch", 0x2515C54, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x2515C73, 0x2515C34,
+                  kTeleportGuard, 16, 0x5EE6718, 0x2515C00, 0 },
+                { "keepcatch_client", 0x96487D4, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x96487F3, 0x96487B4,
+                  kTeleportGuard, 16, 0x593D8E0, 0x945540, 0x9648780 },
+                { "keepcatch_state", 0x17886DD, { 0x74, 0x20 }, { 0xEB, 0x20 }, 0x17886FA, 0x17886BB,
+                  kTeleportGuard, 16, 0, 0, 0 },
+                { "keepcatch_watchdog", 0x226C038, { 0x85, 0xFF }, { 0xEB, 0x44 }, 0x226C079, 0x226C038,
+                  kWatchdogGuard, 8, 0, 0, 0 },
+            },
+            0x213BC30, 0, 0x2A5895C,
+            0x2E67C30, 0x2E689DA, 0x2E68FAC,
+            { { "the release in +0x1788A80", 0x1788F43 }, { "the release in +0x227F500", 0x227F6B6 } },
+            0x226BFB0, 0x1F8, kTeleportHead3392,
+        },
         {
             "1.0.0.3462", 0x226AE60,
             {

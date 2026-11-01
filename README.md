@@ -5,7 +5,7 @@ on your back and is still worth turning in at the other end. Works on 2.03.00
 exe 1.0.0.2944, on the 1.0.0.2949 and 1.0.0.2976 patches, on 1.0.0.3392,
 the DLC update of 29 October 2026, on 1.0.0.3424 and 1.0.0.3446, the two
 hotfixes of 30 October, on 1.0.0.3460, the patch of 31 October, and on
-1.0.0.3462, the patch of 1 November. Before
+1.0.0.3462 and 1.0.0.3479, the two patches of 1 November. Before
 release, Seth carried an outlaw through a map
 teleport with 1.0.3 and with 1.0.4 on 1.0.0.2976, did it again with the 3392
 table on 1.0.0.3392, with 1.0.10 on 1.0.0.3424, and with a 1.0.11 test build
@@ -14,7 +14,8 @@ day. The fix in 1.0.6 went to one player as a test build
 first, and they carried their bounty through with it. 1.0.1, 1.0.2, 1.0.7,
 1.0.8 and 1.0.9 went out untested. 1.0.12, the first with the 3460 table,
 was never played on 3460. On 1 November Seth carried an outlaw through a
-teleport on 1.0.0.3462 with the build that became 1.0.13.
+teleport on 1.0.0.3462 with the build that became 1.0.13, and again on
+1.0.0.3479 that morning with the build that became 1.0.14.
 
 Without it the teleport goes through and the outlaw does not. Two separate
 things remove him during the confirm: the teleport releases the catch, and
@@ -257,6 +258,13 @@ had it, again with the same code. `patch-dlc\work\bounty-teleportation\3462`
 has the scripts. Seth played it that morning as Kliff. The sweep kept the
 outlaw through the teleport, and the releases went back to the game's own
 79 seconds later, when he was no longer carried.
+
+The second patch of 1 November, exe 1.0.0.3479, moved every address back by
+0x50 except the client release, which went forward by 0x8FC80, and changed
+none of the code. `patch-dlc\work\bounty-teleportation\3479` has the
+scripts. Seth played 1.0.14's code on it the same morning, and the outlaw
+came through the teleport. The releases went back to the game's own 39
+seconds later.
 
 ## Antivirus
 
