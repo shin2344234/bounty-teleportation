@@ -53,7 +53,10 @@ namespace
     // them all again and changed nothing else this plugin reads. 1.0.0.3446
     // moved them once more and dropped the thunk in front of the holder
     // check, so the sweep calls it directly there. The 31 October patch,
-    // 1.0.0.3460, moved them all again and changed none of that code. Every build is listed, and the one whose
+    // 1.0.0.3460, moved them all again and changed none of that code. The
+    // 1 November patch, 1.0.0.3462, moved the server and client releases, the
+    // sweep and the teleport handler and left the rest where 3460 had it, again
+    // with the same code. Every build is listed, and the one whose
     // addresses all check out is the one used. research\derive_2949.py is how the later sets were
     // found: every one of them from a byte pattern or from a reference to
     // something already found, never from an offset against the old build.
@@ -132,6 +135,23 @@ namespace
     // test rather than the `je` below it: with something actually held, the
     // `jne` in between jumps past that `je` and never reads it.
     const Build kBuilds[] = {
+        {
+            "1.0.0.3462", 0x226AE60,
+            {
+                { "keepcatch", 0x2515CA4, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x2515CC3, 0x2515C84,
+                  kTeleportGuard, 16, 0x5EE6718, 0x2515C50, 0 },
+                { "keepcatch_client", 0x95B8B54, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x95B8B73, 0x95B8B34,
+                  kTeleportGuard, 16, 0x593D8E0, 0x945570, 0x95B8B00 },
+                { "keepcatch_state", 0x178872D, { 0x74, 0x20 }, { 0xEB, 0x20 }, 0x178874A, 0x178870B,
+                  kTeleportGuard, 16, 0, 0, 0 },
+                { "keepcatch_watchdog", 0x226C088, { 0x85, 0xFF }, { 0xEB, 0x44 }, 0x226C0C9, 0x226C088,
+                  kWatchdogGuard, 8, 0, 0, 0 },
+            },
+            0x213BC80, 0, 0x2A589AC,
+            0x2E67C80, 0x2E68A2A, 0x2E68FFC,
+            { { "the release in +0x1788AD0", 0x1788F93 }, { "the release in +0x227F550", 0x227F706 } },
+            0x226C000, 0x1F8, kTeleportHead3392,
+        },
         {
             "1.0.0.3460", 0x226AE60,
             {
