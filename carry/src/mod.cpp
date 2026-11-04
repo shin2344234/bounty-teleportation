@@ -58,7 +58,9 @@ namespace
     // sweep and the teleport handler and left the rest where 3460 had it, again
     // with the same code. 1.0.0.3479, later the same day, moved the client
     // release by 0x8FC80 and nearly everything else back by 0x50, and changed
-    // none of that code either. Every build is listed, and the one whose
+    // none of that code either. The 4 November patch, 1.0.0.3527, moved them
+    // all by different amounts; the departure sweep grew its stack frame, and
+    // every other function this plugin reads kept its code. Every build is listed, and the one whose
     // addresses all check out is the one used. research\derive_2949.py is how the later sets were
     // found: every one of them from a byte pattern or from a reference to
     // something already found, never from an offset against the old build.
@@ -137,6 +139,23 @@ namespace
     // test rather than the `je` below it: with something actually held, the
     // `jne` in between jumps past that `je` and never reads it.
     const Build kBuilds[] = {
+        {
+            "1.0.0.3527", 0x226DAC0,
+            {
+                { "keepcatch", 0x2519914, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x2519933, 0x25198F4,
+                  kTeleportGuard, 16, 0x5EEC968, 0x25198C0, 0 },
+                { "keepcatch_client", 0x94FCC54, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x94FCC73, 0x94FCC34,
+                  kTeleportGuard, 16, 0x59438F0, 0x946330, 0x94FCC00 },
+                { "keepcatch_state", 0x1789C5D, { 0x74, 0x20 }, { 0xEB, 0x20 }, 0x1789C7A, 0x1789C3B,
+                  kTeleportGuard, 16, 0, 0, 0 },
+                { "keepcatch_watchdog", 0x226ECE8, { 0x85, 0xFF }, { 0xEB, 0x44 }, 0x226ED29, 0x226ECE8,
+                  kWatchdogGuard, 8, 0, 0, 0 },
+            },
+            0x213E850, 0, 0x2A5C822,
+            0x2E6D5A0, 0x2E6E34A, 0x2E6E91C,
+            { { "the release in +0x178A000", 0x178A4C3 }, { "the release in +0x22821B0", 0x2282366 } },
+            0x226EC60, 0x1F8, kTeleportHead3392,
+        },
         {
             "1.0.0.3479", 0x226AE10,
             {
