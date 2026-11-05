@@ -282,9 +282,9 @@ The patch of 5 November, exe 1.0.0.3549, moved only the client release, to
 
 ## Antivirus
 
-VirusTotal counts 1.0.16's loose plugin at 0/70, its DMM archive at 0/67 and
-the manual archive at 0/66. The plugin read 0/70 for 1.0.0, 0/71 for 1.0.1,
-and 0/71 for each of 1.0.3 to 1.0.15. 1.0.2's read 1/70, the one being Microsoft's
+VirusTotal counts 1.0.17's loose plugin at 0/70, its DMM archive at 0/67 and
+the manual archive at 0/67. The plugin read 0/70 for 1.0.0, 0/71 for 1.0.1,
+0/71 for each of 1.0.3 to 1.0.15 and 0/70 for 1.0.16. 1.0.2's read 1/70, the one being Microsoft's
 Trojan:Win32/Wacatac.B!ml, the label it gives a file its model dislikes rather
 than one it recognises. Desktop Defender found nothing in that file, and
 Microsoft passed the same plugin inside both 1.0.2 archives. Every release
@@ -293,7 +293,7 @@ with a fourth. 1.0.9 came back clean as well, and so did 1.0.10 to 1.0.12
 with their tables for the DLC, its hotfixes and the 31 October patch.
 1.0.13, built for the 1 November patch, is clean too, and so are 1.0.14 for
 the second patch that day and 1.0.15. 1.0.16, for the 4 November patch,
-is clean as well.
+is clean as well, and so is 1.0.17 for the next day's.
 
 The plugin imports kernel32 and nothing else, reads and writes no registry key
 and no game file, and is signed under Microsoft's identity-verified chain as
