@@ -5,8 +5,8 @@ on your back and is still worth turning in at the other end. Works on 2.03.00
 exe 1.0.0.2944, on the 1.0.0.2949 and 1.0.0.2976 patches, on 1.0.0.3392,
 the DLC update of 29 October 2026, on 1.0.0.3424 and 1.0.0.3446, the two
 hotfixes of 30 October, on 1.0.0.3460, the patch of 31 October, and on
-1.0.0.3462 and 1.0.0.3479, the two patches of 1 November, and on
-1.0.0.3527, the patch of 4 November. Before
+1.0.0.3462 and 1.0.0.3479, the two patches of 1 November, on 1.0.0.3527,
+the patch of 4 November, and on 1.0.0.3549, the next day's. Before
 release, Seth carried an outlaw through a map
 teleport with 1.0.3 and with 1.0.4 on 1.0.0.2976, did it again with the 3392
 table on 1.0.0.3392, with 1.0.10 on 1.0.0.3424, and with a 1.0.11 test build
@@ -17,7 +17,8 @@ first, and they carried their bounty through with it. 1.0.1, 1.0.2, 1.0.7,
 was never played on 3460. On 1 November Seth carried an outlaw through a
 teleport on 1.0.0.3462 with the build that became 1.0.13, and again on
 1.0.0.3479 that morning with the build that became 1.0.14. 1.0.16, the
-first with the 3527 table, went out untested.
+first with the 3527 table, went out untested. Seth played 1.0.17 on
+1.0.0.3549 before it went out.
 
 Without it the teleport goes through and the outlaw does not. Two separate
 things remove him during the confirm: the teleport releases the catch, and
@@ -273,6 +274,11 @@ different amounts for different functions. The departure sweep grew its
 stack frame, and its call to the holder check is still a direct call. No
 other function the plugin reads changed its code.
 `patch-dlc\work\bounty-teleportation\3527` has the scripts.
+
+The patch of 5 November, exe 1.0.0.3549, moved only the client release, to
++0x94B7660, and left its code alone. The thunk in its vtable slot stayed at
++0x946330 and now jumps there. Every other address is where 3527 had it.
+`patch-dlc\work\bounty-teleportation\3549` has the scripts.
 
 ## Antivirus
 

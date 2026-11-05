@@ -3,9 +3,9 @@
 Fast travel while carrying a bounty target. He rides along on your back and is
 still worth turning in at the other end. For Crimson Desert exe 1.0.0.2944,
 1.0.0.2949, 1.0.0.2976, 1.0.0.3392, 1.0.0.3424, 1.0.0.3446, 1.0.0.3460,
-1.0.0.3462, 1.0.0.3479 or 1.0.0.3527. 3392 is the DLC update and 3424 and
-3446 its hotfixes. 3460 came out on 31 October, 3462 and 3479 on 1 November,
-and 3527 on 4 November.
+1.0.0.3462, 1.0.0.3479, 1.0.0.3527 or 1.0.0.3549. 3392 is the DLC update and
+3424 and 3446 its hotfixes. 3460 came out on 31 October, 3462 and 3479 on 1
+November, 3527 on 4 November and 3549 on 5 November.
 
 In the unmodded game the teleport happens and he does not. You arrive alone.
 
@@ -64,7 +64,7 @@ issue.
 Eight addresses are written or hooked and each is checked against the bytes
 that should be there first. The plugin carries a set of them for each game
 build it knows, 1.0.0.2944, 1.0.0.2949, 1.0.0.2976, 1.0.0.3392, 1.0.0.3424,
-1.0.0.3446, 1.0.0.3460, 1.0.0.3462, 1.0.0.3479 and 1.0.0.3527, and uses whichever the game matches. On a game update matching none
+1.0.0.3446, 1.0.0.3460, 1.0.0.3462, 1.0.0.3479, 1.0.0.3527 and 1.0.0.3549, and uses whichever the game matches. On a game update matching none
 of them it writes nothing, hooks nothing, and the log says so. Everything it
 wrote is put back if it is unloaded.
 
@@ -81,7 +81,9 @@ of 1 November, exe 1.0.0.3462, moved four of them. 1.0.12 stops on it, and
 1.0.13 adds a set for 3462. The second patch that day, exe 1.0.0.3479,
 moved all of them again. 1.0.13 stops on it, and 1.0.14 adds a set for 3479.
 The patch of 4 November, exe 1.0.0.3527, moved all of them once more.
-1.0.15 stops on it, and 1.0.16 adds a set for 3527.
+1.0.15 stops on it, and 1.0.16 adds a set for 3527. The patch of 5
+November, exe 1.0.0.3549, moved one of them. 1.0.16 stops on it, and 1.0.17
+adds a set for 3549.
 
 Do not run this alongside Bounty Probe, the research plugin it came out of.
 They patch the same bytes and hook the same function, and the second one
