@@ -7,7 +7,7 @@ the DLC update of 29 October 2026, on 1.0.0.3424 and 1.0.0.3446, the two
 hotfixes of 30 October, on 1.0.0.3460, the patch of 31 October, and on
 1.0.0.3462 and 1.0.0.3479, the two patches of 1 November, on 1.0.0.3527,
 the patch of 4 November, on 1.0.0.3549, the next day's, and on
-1.0.0.3576, the patch of 6 November. Before
+1.0.0.3576, game version 2.04.08, the patch of 6 November. Before
 release, Seth carried an outlaw through a map
 teleport with 1.0.3 and with 1.0.4 on 1.0.0.2976, did it again with the 3392
 table on 1.0.0.3392, with 1.0.10 on 1.0.0.3424, and with a 1.0.11 test build
@@ -19,8 +19,10 @@ was never played on 3460. On 1 November Seth carried an outlaw through a
 teleport on 1.0.0.3462 with the build that became 1.0.13, and again on
 1.0.0.3479 that morning with the build that became 1.0.14. 1.0.16, the
 first with the 3527 table, went out untested. Seth played 1.0.17 on
-1.0.0.3549 before it went out. 1.0.18, the first with the 3576 table, went
-out untested.
+1.0.0.3549 before it went out. On 6 November he carried a captive through a
+map teleport on 1.0.0.3576 with a 1.0.19 test build, which is 1.0.18 under
+another number. The pattern finder new in 1.0.18 has only been run on the
+archived exes, never in the game, since 3576 is in the table.
 
 Without it the teleport goes through and the outlaw does not. Two separate
 things remove him during the confirm: the teleport releases the catch, and
@@ -297,7 +299,7 @@ different amounts, and changed none of the code behind them.
 RawUnderwear's 1.0.17 log of 5 November showed an exe of 332,021,760 bytes,
 which matches none of the ten archived builds, and the plugin stopped the way
 it should on an unknown build. Every patch since 1.0.0.2944 has moved the
-addresses and left the code behind them alone, so from 1.0.19 the plugin
+addresses and left the code behind them alone, so from 1.0.18 the plugin
 finds them itself when no row in `carry\src\builds.h` fits.
 
 `carry\src\finder.cpp` follows the rules the rows were derived by. The

@@ -5,8 +5,8 @@ still worth turning in at the other end. For Crimson Desert exe 1.0.0.2944,
 1.0.0.2949, 1.0.0.2976, 1.0.0.3392, 1.0.0.3424, 1.0.0.3446, 1.0.0.3460,
 1.0.0.3462, 1.0.0.3479, 1.0.0.3527, 1.0.0.3549 or 1.0.0.3576. 3392 is the DLC
 update and 3424 and 3446 its hotfixes. 3460 came out on 31 October, 3462 and
-3479 on 1 November, 3527 on 4 November, 3549 on 5 November and 3576 on 6
-November.
+3479 on 1 November, 3527 on 4 November, 3549 on 5 November and 3576, game
+version 2.04.08, on 6 November.
 
 In the unmodded game the teleport happens and he does not. You arrive alone.
 
@@ -92,7 +92,7 @@ adds a set for 3549. The patch of 6 November, exe 1.0.0.3576, moved all of
 them again. 1.0.17 stops on it, and 1.0.18 adds a set for 3576.
 
 RawUnderwear's log on 5 November came from an exe of 332,021,760 bytes, which
-is none of the builds above, and 1.0.17 stopped on it. 1.0.19 is the first
+is none of the builds above, and 1.0.17 stopped on it. 1.0.18 is the first
 version that finds the addresses itself on a build it doesn't know, so the
 next patch that only moves code around shouldn't stop it.
 
