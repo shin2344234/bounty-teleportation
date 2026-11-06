@@ -63,7 +63,9 @@ namespace
     // every other function this plugin reads kept its code. 1.0.0.3549, the
     // next day, moved only the client release, to +0x94B7660, with the same
     // code; the thunk in its vtable slot stayed at +0x946330 and now jumps
-    // there. Every build is listed, and the one whose
+    // there. The 6 November patch, 1.0.0.3576, moved every one of them again
+    // by different amounts and changed none of that code. Every build is
+    // listed, and the one whose
     // addresses all check out is the one used. research\derive_2949.py is how the later sets were
     // found: every one of them from a byte pattern or from a reference to
     // something already found, never from an offset against the old build.
@@ -142,6 +144,23 @@ namespace
     // test rather than the `je` below it: with something actually held, the
     // `jne` in between jumps past that `je` and never reads it.
     const Build kBuilds[] = {
+        {
+            "1.0.0.3576", 0x226E700,
+            {
+                { "keepcatch", 0x251A6E4, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x251A703, 0x251A6C4,
+                  kTeleportGuard, 16, 0x5EEEB68, 0x251A690, 0 },
+                { "keepcatch_client", 0x959F814, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x959F833, 0x959F7F4,
+                  kTeleportGuard, 16, 0x59459F0, 0x9466A0, 0x959F7C0 },
+                { "keepcatch_state", 0x178A5BD, { 0x74, 0x20 }, { 0xEB, 0x20 }, 0x178A5DA, 0x178A59B,
+                  kTeleportGuard, 16, 0, 0, 0 },
+                { "keepcatch_watchdog", 0x226F928, { 0x85, 0xFF }, { 0xEB, 0x44 }, 0x226F969, 0x226F928,
+                  kWatchdogGuard, 8, 0, 0, 0 },
+            },
+            0x213F490, 0, 0x2A5D472,
+            0x2E6E210, 0x2E6EFBA, 0x2E6F58C,
+            { { "the release in +0x178A960", 0x178AE23 }, { "the release in +0x2282DF0", 0x2282FA6 } },
+            0x226F8A0, 0x1F8, kTeleportHead3392,
+        },
         {
             "1.0.0.3549", 0x226DAC0,
             {

@@ -31,6 +31,8 @@ stack frame, with the patched blocks unchanged;
 patch-dlc\work\bounty-teleportation\3527 has the scripts. 1.0.0.3549, the
 next day, moved only the client release, to +0x94B7660, with the same code;
 the thunk in its vtable slot stayed at +0x946330 and now jumps there.
+The 6 November patch to 1.0.0.3576 moved everything again with the code
+unchanged; patch-dlc\work\bounty-teleportation\3576 has the scripts.
 """
 import sys, struct
 sys.path.insert(0, r"C:\working\cd mods\No more flight restrictions\private\research")
@@ -53,6 +55,18 @@ TICK_HEAD      = "48 89 5C 24 08 48 89 6C 24 18 48 89 74 24 20 57 41 56 41 57 48
 # the watchdog release and is where 1.0.8 makes a skipped release again, then
 # the vtable slot the release is in and the handler's first 15 bytes.
 BUILDS = {
+    "1.0.0.3576": dict(
+        catch_update=0x226E700,
+        releases=[
+            ("keepcatch",          0x251A6E4, "74 22", 0x251A6C4, TELEPORT_GUARD, 0x251A703, 0x5EEEB68, 0x251A690, None),
+            ("keepcatch_client",   0x959F814, "74 22", 0x959F7F4, TELEPORT_GUARD, 0x959F833, 0x59459F0, 0x9466A0, 0x959F7C0),
+            ("keepcatch_state",    0x178A5BD, "74 20", 0x178A59B, TELEPORT_GUARD, 0x178A5DA, None, None, None),
+            ("keepcatch_watchdog", 0x226F928, "85 FF", 0x226F928, WATCHDOG_GUARD, 0x226F969, None, None, None),
+        ],
+        holder=0x213F490, thunk=None, sweep=0x2A5D472,
+        teleport=0x2E6E210, calls=(0x2E6EFBA, 0x2E6F58C),
+        tick=0x226F8A0, slot=0x1F8, teleport_head=TELEPORT_HEAD_3392,
+    ),
     "1.0.0.3549": dict(
         catch_update=0x226DAC0,
         releases=[
