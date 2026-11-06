@@ -58,16 +58,20 @@ nothing, it also lists which of the game's releases let go of whatever was
 being carried, which is how a conflict with another mod gets pinned down.
 
 The log from the session before is `BountyTeleportation.01.log`, and older
-ones go up to `.24`, so if you have already restarted the game, attach the one
+ones go up to `.05`, so if you have already restarted the game, attach the one
 from the session where it happened. Post it on the bugs tab or as a GitHub
 issue.
 
 Eight addresses are written or hooked and each is checked against the bytes
 that should be there first. The plugin carries a set of them for each game
 build it knows, 1.0.0.2944, 1.0.0.2949, 1.0.0.2976, 1.0.0.3392, 1.0.0.3424,
-1.0.0.3446, 1.0.0.3460, 1.0.0.3462, 1.0.0.3479, 1.0.0.3527, 1.0.0.3549 and 1.0.0.3576, and uses whichever the game matches. On a game update matching none
-of them it writes nothing, hooks nothing, and the log says so. Everything it
-wrote is put back if it is unloaded.
+1.0.0.3446, 1.0.0.3460, 1.0.0.3462, 1.0.0.3479, 1.0.0.3527, 1.0.0.3549 and
+1.0.0.3576, and uses whichever the game matches. On a build matching none of
+them, it looks for every address by the code around it, using the same
+patterns each set was read from. It uses what it finds only if every pattern
+turns up in exactly one place and the found set passes the same checks as a
+listed one. Otherwise it writes nothing, hooks nothing, and the log names the
+pattern that didn't fit. Everything it wrote is put back if it is unloaded.
 
 The 21 September 2026 game patch moved every one of those addresses, which is
 why 1.0.0 and 1.0.1 stopped doing anything on it. The 23 September patch moved
@@ -86,6 +90,11 @@ The patch of 4 November, exe 1.0.0.3527, moved all of them once more.
 November, exe 1.0.0.3549, moved one of them. 1.0.16 stops on it, and 1.0.17
 adds a set for 3549. The patch of 6 November, exe 1.0.0.3576, moved all of
 them again. 1.0.17 stops on it, and 1.0.18 adds a set for 3576.
+
+RawUnderwear's log on 5 November came from an exe of 332,021,760 bytes, which
+is none of the builds above, and 1.0.17 stopped on it. 1.0.19 is the first
+version that finds the addresses itself on a build it doesn't know, so the
+next patch that only moves code around shouldn't stop it.
 
 Do not run this alongside Bounty Probe, the research plugin it came out of.
 They patch the same bytes and hook the same function, and the second one

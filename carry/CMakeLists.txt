@@ -55,6 +55,7 @@ add_custom_command(
 add_library(BountyTeleportation SHARED
     "${BT_INI_HEADER}"
     src/dllmain.cpp
+    src/finder.cpp
     src/mod.cpp
     src/patch.cpp
     src/resources.rc
@@ -91,3 +92,10 @@ add_custom_command(TARGET BountyTeleportation POST_BUILD
     COMMENT "Staging dist/"
     VERBATIM
 )
+
+# The pattern finder, run offline over the exes kept under patch-baseline:
+#   build\FinderTest.exe "C:\working\cd mods\patch-baseline"
+add_executable(FinderTest tests/finder_test.cpp src/finder.cpp)
+target_include_directories(FinderTest PRIVATE src)
+target_compile_definitions(FinderTest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS UNICODE _UNICODE)
+target_compile_options(FinderTest PRIVATE /utf-8 /W3 /EHsc)

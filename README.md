@@ -48,6 +48,12 @@ HDE64 length decoder, which is all the hook installer uses it for. Five of the
 plugin's source files are compiled out of `mod\src` rather than copied, so a
 fix to the log, the memory reads or the hook engine lands in both plugins.
 
+`carry\build\FinderTest.exe` runs the pattern finder over every exe kept
+under `patch-baseline` as if none of them were listed, and fails unless it
+returns each build's own row field by field:
+
+    carry\build\FinderTest.exe "C:\working\cd mods\patch-baseline"
+
 `carry\scripts\sign.ps1` signs the plugin and `carry\scripts\package.ps1` then
 checks the eight addresses against the game, builds the two archives and prints
 their checksums.
@@ -285,6 +291,36 @@ The patch of 5 November, exe 1.0.0.3549, moved only the client release, to
 The patch of 6 November, exe 1.0.0.3576, moved every address again, by
 different amounts, and changed none of the code behind them.
 `patch-dlc\work\bounty-teleportation\3576` has the scripts.
+
+## Builds it doesn't know
+
+RawUnderwear's 1.0.17 log of 5 November showed an exe of 332,021,760 bytes,
+which matches none of the ten archived builds, and the plugin stopped the way
+it should on an unknown build. Every patch since 1.0.0.2944 has moved the
+addresses and left the code behind them alone, so from 1.0.19 the plugin
+finds them itself when no row in `carry\src\builds.h` fits.
+
+`carry\src\finder.cpp` follows the rules the rows were derived by. The
+watchdog guard is in one place, its je lands past the call to catch_update,
+and the function it is in is the catch tick. The teleport handler is the one
+function that starts with a known prologue and calls the character control
+release through slot 0x200 or 0x1F8, and its two callers are the only calls
+to it. Five releases sit behind the teleport guard. The server's is in that
+slot of the vtable whose RTTI names ServerCharacterControlActorComponent, and
+the client's is reached through a jmp in ClientCharacterControlActorComponent's.
+The client state release is the remaining one that passes reason 9 over a
+short block. The holder check is the one function starting with its first
+nine bytes, and the sweep is the one place that loads `[rsi+68]`, `[r14+30]`
+and `[rcx+B0]` before calling it or a jmp to it. The name in the log comes
+from the exe's version resource.
+
+A pattern found in more or fewer places than it should be stops the plugin,
+and the log names it. A found row still goes through the same `BuildChecks`
+as a listed one before anything is written. The scan reads the image in
+memory and takes about a second on the mod thread. `FinderTest` proves the
+rules on all ten archived exes, 1.0.0.2976 to 1.0.0.3576. What it can't prove
+offline is the running game's memory, where another plugin's hooks could put
+a second match somewhere the file on disk has none.
 
 ## Antivirus
 
