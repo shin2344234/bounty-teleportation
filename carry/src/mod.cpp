@@ -89,6 +89,35 @@ namespace
         return at + 5 + static_cast<uintptr_t>(static_cast<intptr_t>(rel));
     }
 
+    // True when the jmps starting at `at` end at `to`, read the same way the
+    // finder reads them. A listed build has exactly one.
+    bool JmpsReach(uintptr_t at, uintptr_t to)
+    {
+        const uintptr_t base = bp::mem::Game().base;
+        for (int h = 0; h < finder::kMaxHops; ++h)
+        {
+            uint8_t b[12] = {};
+            size_t n = 12;
+            if (!bp::mem::ReadBytes(base + at, b, n))
+            {
+                n = 5;
+                if (!bp::mem::ReadBytes(base + at, b, n)) return false;
+            }
+            uint32_t indirect = 0;
+            uint32_t next = finder::JmpHop(b, n, static_cast<uint32_t>(at), &indirect);
+            if (!next && indirect)
+            {
+                uint64_t q = 0;
+                if (!bp::mem::Read64(base + indirect, &q) || q < base) return false;
+                next = static_cast<uint32_t>(q - base);
+            }
+            if (!next) return false;
+            if (next == to) return true;
+            at = next;
+        }
+        return false;
+    }
+
     int g_releaseIdx[kReleaseCount] = { -1, -1, -1, -1 };
 
     // True when every address of one release is where that build says. `loud`
@@ -134,7 +163,7 @@ namespace
                             static_cast<unsigned long long>(slot), static_cast<unsigned long long>(r.slotTarget));
                 return false;
             }
-            if (r.thunkTo && BranchTarget(r.slotTarget, 0xE9) != r.thunkTo)
+            if (r.thunkTo && !JmpsReach(r.slotTarget, r.thunkTo))
             {
                 if (loud)
                     LOG_ERR("[%s] the thunk at +0x%llX does not jump to +0x%llX; nothing written", r.label,
@@ -195,24 +224,25 @@ namespace
     // the addresses without changing the code they point at.
     finder::Found g_found;
 
-    // Every page of [p, p+n) committed and readable. A section the game has
-    // made unreadable in part is left out of the scan.
-    bool SpanReadable(const void* p, size_t n)
+    // How many bytes from p, up to n, are one region of memory, and whether
+    // they can be read. 1.0.18 asked this of a whole section at once and left
+    // the section out if any page of it failed, which on RawUnderwear's Xbox
+    // PC Store game would lose the client release alone.
+    size_t SpanRun(const void* p, size_t n, bool* readable)
     {
-        uintptr_t a = reinterpret_cast<uintptr_t>(p);
-        const uintptr_t end = a + n;
-        while (a < end)
-        {
-            MEMORY_BASIC_INFORMATION mbi;
-            if (!VirtualQuery(reinterpret_cast<LPCVOID>(a), &mbi, sizeof mbi)) return false;
-            if (mbi.State != MEM_COMMIT || (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) ||
-                mbi.Protect == PAGE_EXECUTE)
-                return false;
-            const uintptr_t next = reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
-            if (next <= a) return false;
-            a = next;
-        }
-        return true;
+        MEMORY_BASIC_INFORMATION mbi;
+        if (!VirtualQuery(p, &mbi, sizeof mbi)) return 0;
+        *readable = mbi.State == MEM_COMMIT && !(mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) &&
+                    mbi.Protect != PAGE_EXECUTE;
+        const uintptr_t a = reinterpret_cast<uintptr_t>(p);
+        const uintptr_t next = reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
+        if (next <= a) return 0;
+        return next - a < n ? next - a : n;
+    }
+
+    void FinderNote(const char* line)
+    {
+        LOG("[mod] [finder] %s", line);
     }
 
     // POD only, for __try.
@@ -236,7 +266,8 @@ namespace
         v.base = reinterpret_cast<const uint8_t*>(game.base);
         v.size = game.size;
         v.loadedAt = game.base;
-        v.readable = &SpanReadable;
+        v.runs = &SpanRun;
+        v.note = &FinderNote;
         char why[256] = "";
         bool faulted = false;
         const bool ok = GuardedFind(&v, &g_found, why, sizeof why, &faulted);

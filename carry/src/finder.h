@@ -23,9 +23,15 @@ namespace bt::finder
         const uint8_t* base = nullptr;  // RVA 0
         size_t         size = 0;        // SizeOfImage
         uint64_t       loadedAt = 0;    // what an absolute pointer to RVA 0 reads as in this copy
-        // Optional: false for a section that cannot be read in place, which
-        // is then left out of every scan. The test passes nothing.
-        bool (*readable)(const void* p, size_t n) = nullptr;
+        // Optional: how many bytes from p, up to n, share p's protection, and
+        // whether they can be read. A section is scanned in its readable
+        // pieces and the rest is left out and named in the notes. The test
+        // passes nothing and every byte is read.
+        size_t (*runs)(const void* p, size_t n, bool* readable) = nullptr;
+        // Optional: one line of detail at a time, for the log. Every scan
+        // names the release candidates it saw; a refused one also lists each
+        // CharacterControl vtable's release slot and the image's sections.
+        void (*note)(const char* line) = nullptr;
     };
 
     // A found row. build.name and build.others[].label point into this
@@ -44,4 +50,14 @@ namespace bt::finder
 
     // The exe's FILEVERSION from its version resource, as "1.0.0.3576".
     bool FileVersion(const View& v, char* out, size_t n);
+
+    // One step along a chain of jmps. `p` holds `n` bytes read at rva `at`.
+    // Returns where a jmp there lands: E9 rel32 on its own, or behind the
+    // this-adjusting prefix of an adjustor thunk (sub rcx,imm / add rcx,imm /
+    // lea rcx,[rcx+disp]). For jmp [rip+disp32] (FF 25) it returns 0 and sets
+    // *indirect to the rva of the pointer to read. 0 with *indirect 0 means
+    // the bytes are not a jmp. Needs up to 12 bytes to see every form.
+    // mod.cpp checks a listed build's release slot with the same steps.
+    uint32_t JmpHop(const uint8_t* p, size_t n, uint32_t at, uint32_t* indirect);
+    constexpr int kMaxHops = 4;
 }
