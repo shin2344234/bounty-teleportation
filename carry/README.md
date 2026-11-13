@@ -3,10 +3,11 @@
 Fast travel while carrying a bounty target. He rides along on your back and is
 still worth turning in at the other end. For Crimson Desert exe 1.0.0.2944,
 1.0.0.2949, 1.0.0.2976, 1.0.0.3392, 1.0.0.3424, 1.0.0.3446, 1.0.0.3460,
-1.0.0.3462, 1.0.0.3479, 1.0.0.3527, 1.0.0.3549 or 1.0.0.3576. 3392 is the DLC
-update and 3424 and 3446 its hotfixes. 3460 came out on 31 October, 3462 and
-3479 on 1 November, 3527 on 4 November, 3549 on 5 November and 3576, game
-version 2.04.08, on 6 November.
+1.0.0.3462, 1.0.0.3479, 1.0.0.3527, 1.0.0.3549, 1.0.0.3576 or 1.0.0.3663.
+3392 is the DLC update and 3424 and 3446 its hotfixes. 3460 came out on 31
+October, 3462 and 3479 on 1 November, 3527 on 4 November, 3549 on 5
+November, 3576, game version 2.04.08, on 6 November and 3663, game version
+2.05.00, on 13 November.
 
 In the unmodded game the teleport happens and he does not. You arrive alone.
 
@@ -65,8 +66,8 @@ issue.
 Eight addresses are written or hooked and each is checked against the bytes
 that should be there first. The plugin carries a set of them for each game
 build it knows, 1.0.0.2944, 1.0.0.2949, 1.0.0.2976, 1.0.0.3392, 1.0.0.3424,
-1.0.0.3446, 1.0.0.3460, 1.0.0.3462, 1.0.0.3479, 1.0.0.3527, 1.0.0.3549 and
-1.0.0.3576, and uses whichever the game matches. On a build matching none of
+1.0.0.3446, 1.0.0.3460, 1.0.0.3462, 1.0.0.3479, 1.0.0.3527, 1.0.0.3549,
+1.0.0.3576 and 1.0.0.3663, and uses whichever the game matches. On a build matching none of
 them, it looks for every address by the code around it, using the same
 patterns each set was read from. It uses what it finds only if every pattern
 turns up in exactly one place and the found set passes the same checks as a
@@ -89,12 +90,19 @@ The patch of 4 November, exe 1.0.0.3527, moved all of them once more.
 1.0.15 stops on it, and 1.0.16 adds a set for 3527. The patch of 5
 November, exe 1.0.0.3549, moved one of them. 1.0.16 stops on it, and 1.0.17
 adds a set for 3549. The patch of 6 November, exe 1.0.0.3576, moved all of
-them again. 1.0.17 stops on it, and 1.0.18 adds a set for 3576.
+them again. 1.0.17 stops on it, and 1.0.18 adds a set for 3576. The patch
+of 13 November, exe 1.0.0.3663, moved all of them once more, and 1.0.19
+adds a set for 3663.
 
 RawUnderwear's log on 5 November came from an exe of 332,021,760 bytes, which
 is none of the builds above, and 1.0.17 stopped on it. 1.0.18 is the first
 version that finds the addresses itself on a build it doesn't know, so the
-next patch that only moves code around shouldn't stop it.
+next patch that only moves code around shouldn't stop it. That copy is the
+Xbox PC Store's, and 1.0.18 still stopped on it, because it gave up on a
+whole stretch of code when one page of it couldn't be read. 1.0.19 reads
+around such pages and follows the jumps from a vtable to the function they
+lead to. It hasn't been run on a Store copy yet, so if it stops on yours,
+send the log.
 
 Do not run this alongside Bounty Probe, the research plugin it came out of.
 They patch the same bytes and hook the same function, and the second one
