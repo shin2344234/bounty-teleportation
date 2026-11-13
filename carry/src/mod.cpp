@@ -230,12 +230,13 @@ namespace
     // they can be read. 1.0.18 asked this of a whole section at once and left
     // the section out if any page of it failed, which on RawUnderwear's Xbox
     // PC Store game would lose the client release alone.
-    size_t SpanRun(const void* p, size_t n, bool* readable)
+    size_t SpanRun(const void* p, size_t n, bool* readable, uint32_t* protect)
     {
         MEMORY_BASIC_INFORMATION mbi;
         if (!VirtualQuery(p, &mbi, sizeof mbi)) return 0;
         *readable = mbi.State == MEM_COMMIT && !(mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) &&
                     mbi.Protect != PAGE_EXECUTE;
+        *protect = mbi.State == MEM_COMMIT ? mbi.Protect : 0;
         const uintptr_t a = reinterpret_cast<uintptr_t>(p);
         const uintptr_t next = reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
         if (next <= a) return 0;
@@ -261,7 +262,11 @@ namespace
         }
     }
 
-    const Build* FindBuild()
+    // Why the last search failed, so a later one that fails the same way
+    // leaves out the survey the first one already wrote.
+    char g_lastWhy[512] = "";
+
+    const Build* FindBuild(bool survey)
     {
         const bp::mem::Module& game = bp::mem::Game();
         finder::View v;
@@ -270,19 +275,31 @@ namespace
         v.loadedAt = game.base;
         v.runs = &SpanRun;
         v.note = &FinderNote;
-        char why[256] = "";
+        v.survey = survey;
+        char why[512] = "";
         bool faulted = false;
         const bool ok = GuardedFind(&v, &g_found, why, sizeof why, &faulted);
         if (faulted)
         {
             LOG_ERR("[mod] reading the game's code for the patterns faulted, so nothing is used from it");
+            snprintf(g_lastWhy, sizeof g_lastWhy, "faulted");
             return nullptr;
         }
         if (!ok)
         {
             LOG_ERR("[mod] the patterns do not fit this game (%s, %llu ms): %s", g_found.name, g_found.scanMs, why);
+            if (!survey && strcmp(why, g_lastWhy) != 0)
+            {
+                LOG("[mod] that is a different reason from the last search, so it runs once more with the survey");
+                snprintf(g_lastWhy, sizeof g_lastWhy, "%s", why);
+                return FindBuild(true);
+            }
+            snprintf(g_lastWhy, sizeof g_lastWhy, "%s", why);
             return nullptr;
         }
+        if (g_found.wide)
+            LOG("[mod] the code was found only with the pieces whose pages are executable or whose header says code "
+                "read as code");
         const Build& b = g_found.build;
         LOG("[mod] found by pattern in %llu ms for %s: catch_update +0x%llX, catch tick +0x%llX, teleport "
                  "handler +0x%llX called from +0x%llX and +0x%llX, release slot 0x%llX, holder check +0x%llX "
@@ -323,7 +340,7 @@ namespace
             }
         LOG("[mod] this game matches none of the %zu builds this plugin knows, the newest being %s, so it "
                  "looks for every address by pattern instead", _countof(kBuilds), kBuilds[0].name);
-        if (const Build* found = FindBuild()) return found;
+        if (const Build* found = FindBuild(true)) return found;
         LOG_ERR("[mod] Nothing is written and nothing is hooked, which is what a game patch the patterns no longer "
                 "fit looks like from in here. The reasons the newest known build does not fit follow.");
         BuildChecks(kBuilds[0], true);
@@ -1151,6 +1168,30 @@ namespace
         // Which game this is. Nothing is written or hooked if it is none of
         // the builds the addresses were read off.
         g_build = SelectBuild();
+
+        // An unlisted build that the patterns did not fit is searched again
+        // later, in case its code was not unpacked or readable yet when the
+        // plugin loaded. Hooks go in whenever a search succeeds, as they
+        // would at load.
+        if (!g_build && g_lastWhy[0])
+        {
+            static const DWORD kAgainAt[] = { 30, 90, 300 };
+            const ULONGLONG start = GetTickCount64();
+            for (DWORD at : kAgainAt)
+            {
+                while (!g_stop.load() && GetTickCount64() - start < at * 1000ull) { Sleep(250); bp::Log::Flush(); }
+                if (g_stop.load()) return 0;
+                LOG("[mod] searching again, %lu s after the first search, in case the game's code was not unpacked "
+                    "or readable yet",
+                    at);
+                g_build = FindBuild(false);
+                bp::Log::Flush();
+                if (g_build) break;
+            }
+            if (!g_build)
+                LOG_ERR("[mod] every search failed, the last %lu s after the first, so nothing is hooked this session",
+                        kAgainAt[_countof(kAgainAt) - 1]);
+        }
         if (!g_build)
         {
             while (!g_stop.load()) { Sleep(250); bp::Log::Flush(); }

@@ -94,7 +94,8 @@ namespace
             FIELD(thunkTo);
 #undef FIELD
             snprintf(what, sizeof what, "%s.shape", a.label);
-            Diff(n, what, reinterpret_cast<uintptr_t>(a.shape), reinterpret_cast<uintptr_t>(b.shape));
+            if (a.shapeLen != b.shapeLen || !b.shape || memcmp(a.shape, b.shape, a.shapeLen) != 0)
+                Diff(n, what, reinterpret_cast<uintptr_t>(a.shape), reinterpret_cast<uintptr_t>(b.shape));
         }
         Diff(n, "holderCheck", t.holderCheck, f.holderCheck);
         Diff(n, "holderThunk", t.holderThunk, f.holderThunk);
@@ -142,15 +143,17 @@ namespace
         memcpy(&img[at + 1], &rel, 4);
     }
 
+    const char* g_noteBuild = "";
     std::vector<std::string> g_notes;
     void KeepNote(const char* line) { g_notes.emplace_back(line); }
 
     uint32_t g_holeFrom = 0, g_holeTo = 0;
     const uint8_t* g_holeBase = nullptr;
-    size_t Hole(const void* p, size_t n, bool* readable)
+    size_t Hole(const void* p, size_t n, bool* readable, uint32_t* protect)
     {
         const uint32_t r = static_cast<uint32_t>(static_cast<const uint8_t*>(p) - g_holeBase);
         *readable = r < g_holeFrom || r >= g_holeTo;
+        *protect = *readable ? PAGE_READONLY : PAGE_NOACCESS;
         const uint32_t next = r < g_holeFrom ? g_holeFrom : r < g_holeTo ? g_holeTo : 0xFFFFFFFFu;
         const size_t run = next - r;
         return run < n ? run : n;
@@ -308,6 +311,144 @@ namespace
         }
         restore();
     }
+
+    // Pages from g_liveFrom to g_liveTo report g_liveProt, the rest read-only.
+    uint32_t g_liveFrom = 0, g_liveTo = 0, g_liveProt = 0;
+    size_t Live(const void* p, size_t n, bool* readable, uint32_t* protect)
+    {
+        const uint32_t r = static_cast<uint32_t>(static_cast<const uint8_t*>(p) - g_holeBase);
+        *readable = true;
+        *protect = r >= g_liveFrom && r < g_liveTo ? g_liveProt : PAGE_READONLY;
+        const uint32_t next = r < g_liveFrom ? g_liveFrom : r < g_liveTo ? g_liveTo : 0xFFFFFFFFu;
+        const size_t run = next - r;
+        return run < n ? run : n;
+    }
+
+    IMAGE_SECTION_HEADER* SectionOf(std::vector<uint8_t>& img, uint32_t rva)
+    {
+        auto* nt = reinterpret_cast<IMAGE_NT_HEADERS64*>(img.data() + *reinterpret_cast<const uint32_t*>(img.data() + 0x3C));
+        auto* sh = IMAGE_FIRST_SECTION(nt);
+        for (int i = 0; i < nt->FileHeader.NumberOfSections; ++i)
+            if (rva >= sh[i].VirtualAddress && rva < sh[i].VirtualAddress + sh[i].Misc.VirtualSize) return &sh[i];
+        return nullptr;
+    }
+
+    void PrintNotes(const char* build, const char* only)
+    {
+        if (strcmp(build, only) != 0) return;
+        for (const std::string& n : g_notes) printf("    %s\n", n.c_str());
+    }
+
+    // What the two reports could be: the watchdog's bytes differing from
+    // Steam's, and code in a section the header does not mark executable.
+    void Reports(bt::finder::View v, std::vector<uint8_t>& img, const bt::Build& row, const char* noteBuild)
+    {
+        const bt::Release& wd = row.releases[3];
+        const uint32_t wg = static_cast<uint32_t>(wd.guard);
+        const std::vector<uint32_t> pad = Padding(img, 1);
+        static bt::finder::Found found;
+        char why[512] = "";
+
+        // A second copy of the exact guard in padding. The exact pattern is
+        // then in two places, and the looser search has to turn the copy
+        // down and keep the real one.
+        std::vector<uint8_t> saved(img.begin() + pad[0], img.begin() + pad[0] + 32);
+        memcpy(&img[pad[0]], bt::kWatchdogGuard, sizeof bt::kWatchdogGuard);
+        g_notes.clear();
+        v.note = &KeepNote;
+        if (!bt::finder::Find(v, &found, why, sizeof why))
+        {
+            printf("  %s: with a copy of the watchdog guard in padding: refused: %s\n", row.name, why);
+            ++g_fails;
+        }
+        else
+        {
+            const int before = g_fails;
+            Compare(row, found.build);
+            printf("  with a copy of the watchdog guard in padding: %s (%llu ms)\n",
+                   g_fails == before ? "every field matches" : "MISMATCH", found.scanMs);
+        }
+        PrintNotes(row.name, noteBuild);
+        memcpy(&img[pad[0]], saved.data(), 32);
+
+        // The je over a call placed 0x10 bytes sooner, the way an older
+        // build could lay the watchdog out. The real guard then fails the
+        // exact pattern and has to be found with its displacement.
+        const uint8_t disp = img[wg + 7];
+        const uint8_t nd = static_cast<uint8_t>(disp - 0x10);
+        const uint32_t ncall = wg + 8 + nd - 5;
+        uint8_t keep[6];
+        memcpy(keep, &img[ncall], 5);
+        img[wg + 7] = nd;
+        img[ncall] = 0xE8;
+        const int32_t rel = static_cast<int32_t>(static_cast<int64_t>(row.catchUpdate) - ncall - 5);
+        memcpy(&img[ncall + 1], &rel, 4);
+        g_notes.clear();
+        if (!bt::finder::Find(v, &found, why, sizeof why))
+        {
+            printf("  %s: with the watchdog je displacement 0x%02X: refused: %s\n", row.name, nd, why);
+            ++g_fails;
+        }
+        else
+        {
+            const bt::Release& w = found.build.releases[3];
+            const bool good = w.at == wg && w.call == ncall && w.repl[1] == static_cast<uint8_t>(ncall + 5 - (wg + 2)) &&
+                              w.shape[7] == nd && found.build.catchUpdate == row.catchUpdate &&
+                              found.build.releases[1].at == row.releases[1].at;
+            if (!good) ++g_fails;
+            printf("  with the watchdog je displacement 0x%02X: %s, jump EB %02X to the call at +0x%llX (%llu ms)\n", nd,
+                   good ? "found" : "WRONG", w.repl[1], static_cast<unsigned long long>(w.call), found.scanMs);
+        }
+        PrintNotes(row.name, noteBuild);
+        img[wg + 7] = disp;
+        memcpy(&img[ncall], keep, 5);
+
+        // The section holding the watchdog with no code or execute flag in
+        // its header and executable pages, as a protector that sets them
+        // when it unpacks would leave it.
+        IMAGE_SECTION_HEADER* sh = SectionOf(img, wg);
+        const DWORD chars = sh->Characteristics;
+        sh->Characteristics &= ~(IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_CNT_CODE);
+        g_holeBase = v.base;
+        g_liveFrom = sh->VirtualAddress;
+        g_liveTo = sh->VirtualAddress + sh->Misc.VirtualSize;
+        g_liveProt = PAGE_EXECUTE_READ;
+        v.runs = &Live;
+        g_notes.clear();
+        if (!bt::finder::Find(v, &found, why, sizeof why))
+        {
+            printf("  %s: with the code section's header flags cleared and its pages executable: refused: %s\n",
+                   row.name, why);
+            ++g_fails;
+        }
+        else
+        {
+            const int before = g_fails;
+            Compare(row, found.build);
+            if (!found.wide) ++g_fails;
+            printf("  with the code section's header flags cleared and its pages executable: %s%s (%llu ms)\n",
+                   g_fails == before ? "every field matches" : "MISMATCH", found.wide ? ", on the second pass" : "",
+                   found.scanMs);
+        }
+        PrintNotes(row.name, noteBuild);
+
+        // The same with the pages read-only: nothing says it is code, so it
+        // has to refuse, and the notes have to say where the code went.
+        g_liveProt = PAGE_READONLY;
+        g_notes.clear();
+        if (bt::finder::Find(v, &found, why, sizeof why))
+        {
+            printf("  %s: found a row with its code section marked data\n", row.name);
+            ++g_fails;
+        }
+        else
+            printf("  with the code section marked data it refuses (%llu ms, %zu notes): %s\n", found.scanMs,
+                   g_notes.size(), why);
+        PrintNotes(row.name, noteBuild);
+        sh->Characteristics = chars;
+        v.runs = nullptr;
+        v.note = nullptr;
+    }
 }
 
 int wmain(int argc, wchar_t** argv)
@@ -318,6 +459,10 @@ int wmain(int argc, wchar_t** argv)
         return 2;
     }
     const std::wstring root = argv[1];
+    // An optional second argument names the build whose notes are printed.
+    static char noteBuild[64] = "";
+    if (argc > 2) snprintf(noteBuild, sizeof noteBuild, "%ls", argv[2]);
+    g_noteBuild = noteBuild;
     WIN32_FIND_DATAW fd;
     HANDLE h = FindFirstFileW((root + L"\\*").c_str(), &fd);
     if (h == INVALID_HANDLE_VALUE)
@@ -365,17 +510,22 @@ int wmain(int argc, wchar_t** argv)
         printf("%ls: %s, %s (%llu ms)\n", fd.cFileName, found.name,
                g_fails == before ? "every field matches its row" : "MISMATCH", found.scanMs);
         Variants(v, img, *row);
+        Reports(v, img, *row, g_noteBuild);
 
         // With the watchdog's guard gone, the finder has to refuse rather
-        // than settle for something else.
+        // than settle for something else, and say where it looked.
         memset(img.data() + row->releases[3].guard, 0x90, sizeof bt::kWatchdogGuard);
+        v.note = &KeepNote;
+        g_notes.clear();
         if (bt::finder::Find(v, &found, why, sizeof why))
         {
             printf("  %s: still found a row with the watchdog guard blanked\n", row->name);
             ++g_fails;
         }
         else
-            printf("  with the watchdog guard blanked it refuses: %s\n", why);
+            printf("  with the watchdog guard blanked it refuses (%llu ms, %zu notes): %s\n", found.scanMs,
+                   g_notes.size(), why);
+        PrintNotes(row->name, g_noteBuild);
     } while (FindNextFileW(h, &fd));
     FindClose(h);
     printf("%d builds, %d mismatches\n", builds, g_fails);

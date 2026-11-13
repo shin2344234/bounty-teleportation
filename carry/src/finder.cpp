@@ -13,7 +13,9 @@
 // The catch tick and catch_update. The watchdog's guard, test edi,edi / jne /
 // test ebx,ebx / je, is in one place in the game. Its je lands just past a
 // call, and that call is to catch_update. The function the guard is in is
-// the catch tick.
+// the catch tick. The je has skipped 0x3E bytes on every Steam build, and
+// where those exact bytes are not in one place the same guard with any
+// displacement is tried, kept only where it passes every check above.
 //
 // The map teleport handler. It reads the player's character control
 // component off the actor and calls its release through the vtable:
@@ -43,18 +45,41 @@
 // could not be read loses the client release and nothing else, and the scan
 // then reports exactly what a missing jmp would. A section is scanned piece
 // by piece, and every left-out piece is named in the notes.
+//
+// What is code. The sections the header marks executable. When that fails,
+// a second pass also reads as code every piece whose pages are executable
+// now or whose header says it holds code, since a protector can leave the
+// header's flags behind when it unpacks.
+//
+// What a refused scan logs. Every region of every section with its
+// protection, and a survey of every hit of every pattern above in every
+// readable piece, code or not, with the bytes around it and what each check
+// made of it, so one log from a build nobody here has says where each site
+// went.
 namespace bt::finder
 {
 namespace
 {
     constexpr uint32_t kExec = IMAGE_SCN_MEM_EXECUTE;
-    constexpr int kMaxSec = 256;
+    constexpr uint32_t kLiveExec = PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
+    constexpr int kMaxSec = 1024;
+    constexpr int kMaxHdr = 96;
 
+    // One readable piece of a section. `exec` is the header's flag and what
+    // the first pass reads as code. `alt` marks a piece the header does not
+    // call executable but whose pages are, or whose header says it holds
+    // code, which the second pass reads as code too.
     struct Sec
     {
         uint32_t va = 0, end = 0;
-        bool exec = false;
+        bool exec = false, alt = false;
         char name[9] = {};
+    };
+
+    struct Hdr
+    {
+        char     name[9] = {};
+        uint32_t va = 0, vsize = 0, raw = 0, chars = 0;
     };
 
     // The release candidates. Five on every build so far; room for a few more
@@ -77,6 +102,9 @@ namespace
         const View* v = nullptr;
         Sec      secs[kMaxSec];
         int      nsec = 0;
+        Hdr      hdrs[kMaxHdr];
+        int      nhdr = 0, hdrCount = 0;
+        bool     wide = false;   // the second pass: `alt` pieces count as code
         uint32_t headers = 0;
         uint32_t pdata = 0, pcount = 0;
         uint32_t rsrc = 0, rsrcSize = 0;
@@ -94,10 +122,11 @@ namespace
             if (rva + n <= headers) return v->base + rva;
             return SecOf(rva, n) ? v->base + rva : nullptr;
         }
+        bool Code(const Sec& s) const { return s.exec || (wide && s.alt); }
         bool InCode(uint32_t rva) const
         {
             const Sec* s = SecOf(rva, 1);
-            return s && s->exec;
+            return s && Code(*s);
         }
         bool U32(uint32_t rva, uint32_t* out) const
         {
@@ -169,7 +198,7 @@ namespace
     void Note(const View& v, const char* fmt, ...)
     {
         if (!v.note) return;
-        char line[512];
+        char line[2048];
         va_list ap;
         va_start(ap, fmt);
         vsnprintf(line, sizeof line, fmt, ap);
@@ -218,28 +247,40 @@ namespace
         // and left out, and the rest of the section is still scanned.
         const auto* sh = IMAGE_FIRST_SECTION(nt);
         const int n = nt->FileHeader.NumberOfSections;
+        im->hdrCount = n;
         for (int i = 0; i < n; ++i)
         {
             const uint32_t va = sh[i].VirtualAddress;
-            uint32_t len = sh[i].Misc.VirtualSize > sh[i].SizeOfRawData ? sh[i].Misc.VirtualSize
-                                                                         : sh[i].SizeOfRawData;
-            if (va >= im->size || !len) continue;
-            if (va + len > im->size) len = im->size - va;
             char name[9] = {};
             for (int k = 0; k < 8 && sh[i].Name[k]; ++k)
             {
                 const char ch = static_cast<char>(sh[i].Name[k]);
                 name[k] = ch >= 0x20 && ch < 0x7F ? ch : '?';
             }
+            if (im->nhdr < kMaxHdr)
+            {
+                Hdr& h = im->hdrs[im->nhdr++];
+                memcpy(h.name, name, sizeof name);
+                h.va = va;
+                h.vsize = sh[i].Misc.VirtualSize;
+                h.raw = sh[i].SizeOfRawData;
+                h.chars = sh[i].Characteristics;
+            }
+            uint32_t len = sh[i].Misc.VirtualSize > sh[i].SizeOfRawData ? sh[i].Misc.VirtualSize
+                                                                         : sh[i].SizeOfRawData;
+            if (va >= im->size || !len) continue;
+            if (va + len > im->size) len = im->size - va;
             const bool exec = (sh[i].Characteristics & kExec) != 0;
+            const bool cntCode = (sh[i].Characteristics & IMAGE_SCN_CNT_CODE) != 0;
             uint32_t o = 0;
             while (o < len)
             {
                 size_t run = len - o;
                 bool readable = true;
+                uint32_t protect = 0;
                 if (v.runs)
                 {
-                    run = v.runs(b + va + o, len - o, &readable);
+                    run = v.runs(b + va + o, len - o, &readable, &protect);
                     if (!run)
                     {
                         run = len - o;
@@ -247,11 +288,12 @@ namespace
                     }
                 }
                 if (run > len - o) run = len - o;
+                const bool alt = !exec && (cntCode || (protect & kLiveExec) != 0);
                 const uint32_t at = va + o, to = va + o + static_cast<uint32_t>(run);
                 if (!readable)
                     Note(v, "+0x%X..+0x%X of %s cannot be read and is left out of the scan", at, to, name);
                 else if (im->nsec && im->secs[im->nsec - 1].end == at && im->secs[im->nsec - 1].exec == exec &&
-                         strcmp(im->secs[im->nsec - 1].name, name) == 0)
+                         im->secs[im->nsec - 1].alt == alt && strcmp(im->secs[im->nsec - 1].name, name) == 0)
                     im->secs[im->nsec - 1].end = to;
                 else if (im->nsec < kMaxSec)
                 {
@@ -259,6 +301,7 @@ namespace
                     s.va = at;
                     s.end = to;
                     s.exec = exec;
+                    s.alt = alt;
                     memcpy(s.name, name, sizeof name);
                 }
                 else
@@ -275,11 +318,93 @@ namespace
         return true;
     }
 
+    void ProtText(uint32_t p, char* out, size_t n)
+    {
+        if (!p)
+        {
+            snprintf(out, n, "not committed");
+            return;
+        }
+        const char* base = "other";
+        switch (p & 0xFF)
+        {
+        case PAGE_NOACCESS: base = "no access"; break;
+        case PAGE_READONLY: base = "read"; break;
+        case PAGE_READWRITE: base = "read/write"; break;
+        case PAGE_WRITECOPY: base = "read/copy-on-write"; break;
+        case PAGE_EXECUTE: base = "execute only"; break;
+        case PAGE_EXECUTE_READ: base = "execute/read"; break;
+        case PAGE_EXECUTE_READWRITE: base = "execute/read/write"; break;
+        case PAGE_EXECUTE_WRITECOPY: base = "execute/read/copy-on-write"; break;
+        }
+        snprintf(out, n, "%s%s%s (0x%X)", base, (p & PAGE_GUARD) ? ", guard" : "", (p & PAGE_NOCACHE) ? ", no cache" : "",
+                 p);
+    }
+
+    // The section table as the header has it, on every scan.
+    void NoteHeaders(const Img& im)
+    {
+        const View& v = *im.v;
+        Note(v, "the image is %u bytes with %d sections, headers 0x%X bytes, function table +0x%X with %u entries",
+             im.size, im.hdrCount, im.headers, im.pdata, im.pcount);
+        for (int i = 0; i < im.nhdr; ++i)
+        {
+            const Hdr& h = im.hdrs[i];
+            const uint32_t c = h.chars;
+            Note(v, "section %d %s: +0x%X, 0x%X bytes in memory, 0x%X in the file, characteristics 0x%08X (%s%s%s%s%s%s%s)",
+                 i + 1, h.name, h.va, h.vsize, h.raw, c, (c & IMAGE_SCN_CNT_CODE) ? "code " : "",
+                 (c & IMAGE_SCN_CNT_INITIALIZED_DATA) ? "data " : "",
+                 (c & IMAGE_SCN_CNT_UNINITIALIZED_DATA) ? "bss " : "", (c & IMAGE_SCN_MEM_EXECUTE) ? "execute " : "",
+                 (c & IMAGE_SCN_MEM_READ) ? "read " : "", (c & IMAGE_SCN_MEM_WRITE) ? "write " : "",
+                 (c & IMAGE_SCN_MEM_DISCARDABLE) ? "discardable" : "");
+        }
+        if (im.nhdr < im.hdrCount)
+            Note(v, "sections %d to %d are not listed, past what this keeps", im.nhdr + 1, im.hdrCount);
+    }
+
+    // Every region of every section as the pages are now, with whether it
+    // was scanned and as what. Asks the caller again, so a refused scan
+    // names each protection change without the scan keeping them all.
     void NoteSections(const Img& im)
     {
-        for (int i = 0; i < im.nsec; ++i)
-            Note(*im.v, "scanned %s +0x%X..+0x%X as %s", im.secs[i].name, im.secs[i].va, im.secs[i].end,
-                 im.secs[i].exec ? "code" : "data");
+        const View& v = *im.v;
+        for (int i = 0; i < im.nhdr; ++i)
+        {
+            const Hdr& h = im.hdrs[i];
+            uint32_t len = h.vsize > h.raw ? h.vsize : h.raw;
+            if (h.va >= im.size || !len) continue;
+            if (h.va + len > im.size) len = im.size - h.va;
+            const bool exec = (h.chars & kExec) != 0;
+            uint32_t o = 0;
+            while (o < len)
+            {
+                size_t run = len - o;
+                bool readable = true;
+                uint32_t protect = 0;
+                if (v.runs)
+                {
+                    run = v.runs(v.base + h.va + o, len - o, &readable, &protect);
+                    if (!run)
+                    {
+                        run = len - o;
+                        readable = false;
+                    }
+                }
+                if (run > len - o) run = len - o;
+                const uint32_t at = h.va + o, to = h.va + o + static_cast<uint32_t>(run);
+                char pt[64];
+                if (v.runs) ProtText(protect, pt, sizeof pt);
+                else snprintf(pt, sizeof pt, "a file copy");
+                const Sec* s = im.SecOf(at, 1);
+                const char* as = !readable ? "left out, unreadable"
+                                 : !s ? "left out"
+                                 : s->exec ? "scanned as code"
+                                 : s->alt ? (im.wide ? "scanned as code on the second pass" : "scanned as data, code on a second pass")
+                                 : "scanned as data";
+                Note(v, "%s +0x%X..+0x%X, 0x%X bytes: %s, %s", h.name, at, to, to - at, pt, as);
+                o += static_cast<uint32_t>(run);
+            }
+        }
     }
 
     // Every rva in an executable section where `n` bytes equal `pat`, up to
@@ -290,7 +415,7 @@ namespace
         for (int i = 0; i < im.nsec; ++i)
         {
             const Sec& s = im.secs[i];
-            if (!s.exec || s.end - s.va < n) continue;
+            if (!im.Code(s) || s.end - s.va < n) continue;
             const uint8_t* p = im.v->base + s.va;
             const uint8_t* end = im.v->base + s.end - n + 1;
             while (p < end)
@@ -332,7 +457,7 @@ namespace
         for (int i = 0; i < im.nsec; ++i)
         {
             const Sec& s = im.secs[i];
-            if (!s.exec || s.end - s.va < 5) continue;
+            if (!im.Code(s) || s.end - s.va < 5) continue;
             const uint8_t* base = im.v->base;
             const uint8_t* p = base + s.va;
             const uint8_t* end = base + s.end - 4;
@@ -442,7 +567,7 @@ namespace
         uint64_t lo = ~0ull, hi = 0;
         for (int i = 0; i < im.nsec; ++i)
         {
-            if (!im.secs[i].exec) continue;
+            if (!im.Code(im.secs[i])) continue;
             const uint64_t a = im.v->loadedAt + im.secs[i].va, e = im.v->loadedAt + im.secs[i].end;
             if (a < lo) lo = a;
             if (e > hi) hi = e;
@@ -627,19 +752,312 @@ namespace
         r->thunkTo = 0;
     }
 
+    // mov rcx,[rsi+68] / mov rdx,[r14+30] / mov rcx,[rcx+B0] / call, the
+    // departure sweep's call to the holder check.
+    constexpr uint8_t kSweep[16] = { 0x48, 0x8B, 0x4E, 0x68, 0x49, 0x8B, 0x56, 0x30,
+                                     0x48, 0x8B, 0x89, 0xB0, 0x00, 0x00, 0x00, 0xE8 };
+
+    // `lead`, then the bytes from `before` ahead of rva to `after` past it as
+    // hex, with a | at rva. A byte that cannot be read shows as ??.
+    void NoteAround(const Img& im, const char* lead, uint32_t rva, uint32_t before, uint32_t after)
+    {
+        char hex[0xC0 * 2 + 8];
+        size_t u = 0;
+        const uint32_t from = rva > before ? rva - before : 0;
+        for (uint32_t a = from; a < rva + after && u + 4 < sizeof hex; ++a)
+        {
+            if (a == rva) hex[u++] = '|';
+            const uint8_t* p = im.At(a, 1);
+            if (p) u += snprintf(hex + u, sizeof hex - u, "%02X", *p);
+            else
+            {
+                hex[u++] = '?';
+                hex[u++] = '?';
+            }
+        }
+        hex[u] = 0;
+        Note(*im.v, "%s: +0x%X %s", lead, from, hex);
+    }
+
+    // Why the 8 bytes at g, shaped like the watchdog's guard, are not it, or
+    // nullptr when they are, with catch_update in *cu.
+    const char* WatchdogReject(const Img& im, uint32_t g, uint32_t* cu)
+    {
+        *cu = 0;
+        const uint8_t* p = im.At(g, 8);
+        if (!p) return "its bytes cannot be read";
+        if (p[7] & 0x80) return "its je jumps backwards";
+        const uint32_t landing = g + 8 + p[7];
+        const uint32_t c = im.Branch(landing - 5, 0xE8);
+        if (!c) return "its je does not land just past a call";
+        if (landing - (g + 2) > 0x7F) return "the call is too far for a short jump from the guard";
+        const uint32_t f = im.FuncOf(g);
+        if (!f) return "it is in no function the image lists";
+        if (!im.Is(f, kTickHead, sizeof kTickHead)) return "its function does not start the way the catch tick does";
+        *cu = c;
+        return nullptr;
+    }
+
+    // test r32,r32 / jne over the next test / test r32,r32 / je, either test
+    // with a REX prefix. The offset of the je's displacement byte, or 0.
+    uint32_t SelfTest(const uint8_t* p, size_t n)
+    {
+        size_t o = 0;
+        if (o < n && (p[o] & 0xF0) == 0x40) ++o;
+        if (o + 4 > n || p[o] != 0x85 || p[o + 1] < 0xC0 || p[o + 2] != 0x75) return 0;
+        const size_t skip = p[o + 3];
+        o += 4;
+        const size_t second = o;
+        if (o < n && (p[o] & 0xF0) == 0x40) ++o;
+        if (o + 4 > n || p[o] != 0x85 || p[o + 1] < 0xC0 || p[o + 2] != 0x74) return 0;
+        if (o + 4 - second != skip) return 0;
+        return static_cast<uint32_t>(o + 3);
+    }
+
+    // Every hit of every pattern the search uses, in every readable piece,
+    // code or not, with the bytes around it and what each check made of
+    // it. Only for a refused scan, so one log from a build nobody here has
+    // is enough to see where each site went.
+    void Survey(const Img& im)
+    {
+        const View& v = *im.v;
+        const uint8_t* base = v.base;
+        Note(v, "survey: every hit of every pattern the search uses, in every readable piece, read as code or not");
+
+        // The catch checks, and the call most of them have a je over: what
+        // catch_update would be without the watchdog.
+        uint32_t tgt[64] = {};
+        int tally[64] = {}, ntgt = 0, guards = 0;
+        for (int i = 0; i < im.nsec; ++i)
+        {
+            const Sec& s = im.secs[i];
+            if (s.end - s.va < 16) continue;
+            const uint8_t* p = base + s.va;
+            const uint8_t* end = base + s.end - 15;
+            while (p < end && (p = static_cast<const uint8_t*>(memchr(p, 0x83, end - p))) != nullptr)
+            {
+                if (memcmp(p, kTeleportGuard, 16) != 0)
+                {
+                    ++p;
+                    continue;
+                }
+                const uint32_t g = static_cast<uint32_t>(p - base);
+                ++guards;
+                char lead[640];
+                int u = snprintf(lead, sizeof lead, "catch check +0x%X in %s (%s), function +0x%X; calls within 0x7C:",
+                                 g, s.name, im.Code(s) ? "code" : "not code", im.FuncOf(g));
+                int calls = 0;
+                for (uint32_t k = g; k < g + 0x7C; ++k)
+                {
+                    const uint32_t t = im.Branch(k, 0xE8);
+                    if (!t) continue;
+                    uint32_t je = 0;
+                    for (uint32_t q = g; q < k; ++q)
+                    {
+                        const uint8_t* j = im.At(q, 2);
+                        if (j && j[0] == 0x74 && q + 2 + j[1] == k + 5) je = q;
+                    }
+                    ++calls;
+                    if (u > 0 && u < static_cast<int>(sizeof lead))
+                        u += snprintf(lead + u, sizeof lead - u, " +0x%X to +0x%X%s", k, t,
+                                      je ? " with a je over it" : "");
+                    if (!je) continue;
+                    int t2 = 0;
+                    while (t2 < ntgt && tgt[t2] != t) ++t2;
+                    if (t2 == ntgt && ntgt < 64) tgt[ntgt++] = t;
+                    if (t2 < 64) ++tally[t2];
+                }
+                if (!calls && u > 0 && u < static_cast<int>(sizeof lead)) snprintf(lead + u, sizeof lead - u, " none");
+                NoteAround(im, lead, g, 0x10, 0x90);
+                ++p;
+            }
+        }
+        uint32_t cu = 0;
+        int best = 0;
+        for (int k = 0; k < ntgt; ++k)
+            if (tally[k] > best)
+            {
+                best = tally[k];
+                cu = tgt[k];
+            }
+        Note(v, "%d catch checks; the call with a je over it behind most of them is to +0x%X, behind %d, so that is "
+                "taken as catch_update below",
+             guards, cu, best);
+
+        // The rest in one pass over each piece.
+        for (int i = 0; i < im.nsec; ++i)
+        {
+            const Sec& s = im.secs[i];
+            int nSelf = 0, nExact = 0, nLoose = 0, nTick = 0, nHead = 0, nHead3392 = 0, nHolder = 0, nSweep = 0,
+                nSlot = 0, nSlotShape = 0, nCu = 0, nCuJe = 0;
+            for (uint32_t r = s.va; r < s.end; ++r)
+            {
+                const uint8_t* p = base + r;
+                const size_t avail = s.end - r;
+                const uint8_t b0 = p[0];
+                if (b0 == 0x85 || (b0 & 0xF0) == 0x40)
+                {
+                    const uint32_t d = SelfTest(p, avail);
+                    // The same pair seen from its REX prefix one byte back.
+                    const bool seen = r > s.va && (p[-1] & 0xF0) == 0x40 && SelfTest(p - 1, avail + 1) != 0;
+                    if (d && !seen)
+                    {
+                        ++nSelf;
+                        const bool exact = avail >= 8 && memcmp(p, kWatchdogGuard, 8) == 0;
+                        const bool loose = avail >= 8 && memcmp(p, kWatchdogGuard, 7) == 0;
+                        nExact += exact;
+                        nLoose += loose;
+                        const uint32_t landing = r + d + 1 + p[d];
+                        const uint32_t call = (p[d] & 0x80) ? 0 : im.Branch(landing - 5, 0xE8);
+                        const uint32_t f = im.FuncOf(r);
+                        uint32_t wcu = 0;
+                        const char* rej = loose ? WatchdogReject(im, r, &wcu) : nullptr;
+                        char callText[48] = "not past a call";
+                        if (call) snprintf(callText, sizeof callText, "just past a call to +0x%X", call);
+                        char lead[320];
+                        snprintf(lead, sizeof lead,
+                                 "self-test pair +0x%X in %s (%s), function +0x%X%s: je to +0x%X, %s%s; %s%s",
+                                 r, s.name, im.Code(s) ? "code" : "not code", f,
+                                 f && im.Is(f, kTickHead, sizeof kTickHead) ? " (starts like the catch tick)" : "",
+                                 landing, callText, call && call == cu ? ", catch_update" : "",
+                                 exact ? "the watchdog's exact bytes" : loose ? "the watchdog's bytes but the je displacement"
+                                                                             : "other registers than the watchdog's",
+                                 loose ? (rej ? ", turned down: " : ", fits") : "");
+                        if (rej) strncat(lead, rej, sizeof lead - strlen(lead) - 1);
+                        NoteAround(im, lead, r, 0x20, 0x40);
+                    }
+                }
+                if (b0 == 0x48 && avail >= 27 && memcmp(p, kTickHead, sizeof kTickHead) == 0)
+                {
+                    ++nTick;
+                    Note(v, "catch tick prologue +0x%X in %s, %s", r, s.name,
+                         im.FuncOf(r) == r ? "a function starts there" : "no function starts there");
+                }
+                if (b0 == 0x48 && avail >= 15 && memcmp(p, kTeleportHead, sizeof kTeleportHead) == 0) ++nHead;
+                if (b0 == 0x48 && avail >= 15 && memcmp(p, kTeleportHead3392, sizeof kTeleportHead3392) == 0)
+                    ++nHead3392;
+                if (b0 == 0x48 && avail >= 9 && memcmp(p, kHolderHead, sizeof kHolderHead) == 0)
+                {
+                    ++nHolder;
+                    char lead[160];
+                    snprintf(lead, sizeof lead, "holder check head +0x%X in %s, %s", r, s.name,
+                             im.FuncOf(r) == r ? "a function starts there" : "no function starts there");
+                    NoteAround(im, lead, r, 0x10, 0x30);
+                }
+                if (b0 == 0x48 && avail >= 20 && memcmp(p, kSweep, sizeof kSweep) == 0)
+                {
+                    ++nSweep;
+                    const uint32_t t = im.Branch(r + 15, 0xE8);
+                    const uint32_t t2 = t ? im.Branch(t, 0xE9) : 0;
+                    char lead[256];
+                    snprintf(lead, sizeof lead, "departure sweep +0x%X in %s, calls +0x%X%s", r, s.name, t,
+                             t && im.Is(t, kHolderHead, sizeof kHolderHead) ? ", which starts like the holder check"
+                             : t2 && im.Is(t2, kHolderHead, sizeof kHolderHead)
+                                 ? ", a jmp to a function that starts like the holder check"
+                                 : ", which does not start like the holder check");
+                    NoteAround(im, lead, r, 0x10, 0x20);
+                }
+                if (b0 == 0xFF && avail >= 6 && (p[1] & 0xF8) == 0x90 && p[4] == 0 && p[5] == 0 &&
+                    ((p[2] == 0x00 && p[3] == 0x02) || (p[2] == 0xF8 && p[3] == 0x01)))
+                {
+                    ++nSlot;
+                    uint32_t slot = 0;
+                    const bool shape = r >= s.va + 11 && avail >= 6 && IsSlotCall(p - 11, &slot);
+                    nSlotShape += shape;
+                    const uint32_t f = im.FuncOf(r);
+                    const char* head = !f ? "in no listed function"
+                                       : im.Is(f, kTeleportHead, sizeof kTeleportHead) ? "starts like the teleport handler"
+                                       : im.Is(f, kTeleportHead3392, sizeof kTeleportHead3392)
+                                           ? "starts like the 3392 teleport handler"
+                                           : "starts like neither teleport handler";
+                    char fh[40] = "";
+                    if (const uint8_t* q = f ? im.At(f, 15) : nullptr)
+                        for (int k = 0; k < 15; ++k) snprintf(fh + k * 2, 3, "%02X", q[k]);
+                    char lead[320];
+                    snprintf(lead, sizeof lead,
+                             "release-slot call +0x%X in %s (%s), slot 0x%X, %s the teleport handler's three loads, "
+                             "function +0x%X %s (%s)",
+                             r, s.name, im.Code(s) ? "code" : "not code", p[2] == 0 ? 0x200 : 0x1F8,
+                             shape ? "after" : "without", f, head, fh);
+                    NoteAround(im, lead, r, 0x18, 6);
+                }
+                if (b0 == 0xE8 && cu && avail >= 5 && im.Branch(r, 0xE8) == cu)
+                {
+                    ++nCu;
+                    uint32_t je = 0;
+                    for (uint32_t q = r > 0x80 ? r - 0x80 : 0; q < r; ++q)
+                    {
+                        const uint8_t* j = im.At(q, 2);
+                        if (j && j[0] == 0x74 && q + 2 + j[1] == r + 5) je = q;
+                    }
+                    nCuJe += je != 0;
+                    bool guarded = false;
+                    for (uint32_t q = r > 0x7C ? r - 0x7C : 0; q < r && !guarded; ++q)
+                        guarded = im.Is(q, kTeleportGuard, sizeof kTeleportGuard);
+                    const uint32_t f = im.FuncOf(r);
+                    char jeText[48] = "no short je lands past it";
+                    if (je) snprintf(jeText, sizeof jeText, "a je lands past it from +0x%X", je);
+                    char lead[320];
+                    snprintf(lead, sizeof lead, "call to catch_update +0x%X in %s, function +0x%X%s, %s%s", r, s.name,
+                             f, f && im.Is(f, kTickHead, sizeof kTickHead) ? " (starts like the catch tick)" : "",
+                             jeText, guarded ? ", behind a catch check" : "");
+                    NoteAround(im, lead, je ? je : r, 0x20, je ? r + 5 - je + 4 : 0x10);
+                }
+            }
+            Note(v, "%s +0x%X..+0x%X (%s): %d self-test pairs (%d the watchdog exactly, %d but the je), %d catch tick "
+                    "prologues, %d and %d teleport prologues, %d holder heads, %d sweeps, %d release-slot calls (%d "
+                    "with the handler's loads), %d calls to catch_update (%d with a je over them)",
+                 s.name, s.va, s.end, im.Code(s) ? "code" : s.alt ? "code on a second pass" : "data", nSelf, nExact,
+                 nLoose - nExact, nTick, nHead, nHead3392, nHolder, nSweep, nSlot, nSlotShape, nCu, nCuJe);
+        }
+    }
+
     bool FindAllSites(const Img& im, Found* out, char* why, size_t whyLen)
     {
         Build& b = out->build;
 
         // ---- the watchdog, catch_update and the catch tick ----
+        // The exact bytes first. Where they are not in one place, the same
+        // guard with any je displacement, kept only where the je lands just
+        // past a call, close enough for a short jump, in a function that
+        // starts the way the catch tick does. Each one tried is named.
         uint32_t hit[16];
         int n = FindAll(im, kWatchdogGuard, sizeof kWatchdogGuard, hit, 16);
+        uint32_t wg = n == 1 ? hit[0] : 0;
         if (n != 1)
         {
-            Why(why, whyLen, "the watchdog's guard is in %d places and not one", n);
-            return false;
+            uint32_t loose[64];
+            const int nl = FindAll(im, kWatchdogGuard, sizeof kWatchdogGuard - 1, loose, 64);
+            Note(*im.v, "the watchdog's guard 85 FF 75 04 85 DB 74 3E is in %d places in the code, so any je "
+                        "displacement is tried: 85 FF 75 04 85 DB 74 is in %d",
+                 n, nl);
+            int fits = 0;
+            for (int i = 0; i < nl && i < 64; ++i)
+            {
+                uint32_t c = 0;
+                const char* r = WatchdogReject(im, loose[i], &c);
+                char lead[160];
+                snprintf(lead, sizeof lead, "  +0x%X in %s, function +0x%X: %s", loose[i],
+                         im.SecOf(loose[i], 1) ? im.SecOf(loose[i], 1)->name : "?", im.FuncOf(loose[i]),
+                         r ? r : "fits, catch_update would be +0x");
+                if (!r) snprintf(lead + strlen(lead), sizeof lead - strlen(lead), "%X", c);
+                NoteAround(im, lead, loose[i], 0x20, 0x40);
+                if (!r)
+                {
+                    ++fits;
+                    wg = loose[i];
+                }
+            }
+            if (fits != 1)
+            {
+                Why(why, whyLen,
+                    "the watchdog's guard is in %d places as it is on Steam, and %d with any je displacement, %d of "
+                    "which fit",
+                    n, nl, fits);
+                return false;
+            }
+            Note(*im.v, "the watchdog is taken at +0x%X, with a je displacement of 0x%02X", wg, im.At(wg + 7, 1)[0]);
         }
-        const uint32_t wg = hit[0];
         const uint32_t landing = wg + 8 + im.At(wg + 7, 1)[0];
         const uint32_t wcall = landing - 5;
         const uint32_t cu = im.Branch(wcall, 0xE8);
@@ -672,8 +1090,9 @@ namespace
         w.repl[1] = static_cast<uint8_t>(wdisp);
         w.call = wcall;
         w.guard = wg;
-        w.shape = kWatchdogGuard;
-        w.shapeLen = sizeof kWatchdogGuard;
+        memcpy(out->watchdog, im.At(wg, sizeof out->watchdog), sizeof out->watchdog);
+        w.shape = out->watchdog;
+        w.shapeLen = sizeof out->watchdog;
 
         // ---- the map teleport handler and the release slot ----
         uint32_t tfn = 0, tslot = 0;
@@ -682,7 +1101,7 @@ namespace
         for (int i = 0; i < im.nsec; ++i)
         {
             const Sec& s = im.secs[i];
-            if (!s.exec || s.end - s.va < 17) continue;
+            if (!im.Code(s) || s.end - s.va < 17) continue;
             for (uint32_t r = s.va; r + 17 <= s.end; ++r)
             {
                 const uint8_t* p = im.v->base + r;
@@ -723,8 +1142,6 @@ namespace
             return false;
         }
         b.holderCheck = hit[0];
-        static const uint8_t kSweep[16] = { 0x48, 0x8B, 0x4E, 0x68, 0x49, 0x8B, 0x56, 0x30,
-                                            0x48, 0x8B, 0x89, 0xB0, 0x00, 0x00, 0x00, 0xE8 };
         n = FindAll(im, kSweep, sizeof kSweep, hit, 16);
         if (n != 1)
         {
@@ -993,8 +1410,41 @@ bool Find(const View& v, Found* out, char* why, size_t whyLen)
     if (!FileVersion(v, out->name, sizeof out->name))
         snprintf(out->name, sizeof out->name, "an unlisted build");
     out->build.name = out->name;
-    const bool ok = FindAllSites(im, out, why, whyLen);
-    if (!ok) NoteSections(im);
+    NoteHeaders(im);
+    bool ok = FindAllSites(im, out, why, whyLen);
+
+    // A protector may leave code in a section its header does not mark
+    // executable and make the pages executable when it unpacks. Those
+    // pieces, and any whose header says code, are read as code on a second
+    // pass, only when the first one failed.
+    int alt = 0;
+    for (int i = 0; i < im.nsec; ++i) alt += im.secs[i].alt;
+    if (!ok && alt)
+    {
+        char first[256];
+        snprintf(first, sizeof first, "%s", why);
+        Note(v, "the scan of the executable sections failed (%s), so it runs again with %d more piece%s read as code, "
+                "whose pages are executable or whose header says code",
+             first, alt, alt == 1 ? "" : "s");
+        im.wide = true;
+        char second[256] = "";
+        char keep[sizeof out->name];
+        memcpy(keep, out->name, sizeof keep);
+        *out = Found{};
+        memcpy(out->name, keep, sizeof keep);
+        out->build.name = out->name;
+        ok = FindAllSites(im, out, second, sizeof second);
+        out->wide = ok;
+        if (ok) Note(v, "the second pass found every site");
+        else if (strcmp(first, second) == 0)
+            Why(why, whyLen, "%s, and the same with %d more piece%s read as code", first, alt, alt == 1 ? "" : "s");
+        else Why(why, whyLen, "%s; with %d more piece%s read as code: %s", first, alt, alt == 1 ? "" : "s", second);
+    }
+    if (!ok)
+    {
+        NoteSections(im);
+        if (v.survey) Survey(im);
+    }
     out->scanMs = GetTickCount64() - t0;
     return ok;
 }

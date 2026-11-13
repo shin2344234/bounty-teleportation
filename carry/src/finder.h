@@ -23,15 +23,22 @@ namespace bt::finder
         const uint8_t* base = nullptr;  // RVA 0
         size_t         size = 0;        // SizeOfImage
         uint64_t       loadedAt = 0;    // what an absolute pointer to RVA 0 reads as in this copy
-        // Optional: how many bytes from p, up to n, share p's protection, and
-        // whether they can be read. A section is scanned in its readable
-        // pieces and the rest is left out and named in the notes. The test
-        // passes nothing and every byte is read.
-        size_t (*runs)(const void* p, size_t n, bool* readable) = nullptr;
+        // Optional: how many bytes from p, up to n, share p's protection,
+        // whether they can be read, and the protection itself (PAGE_*, 0 for
+        // memory that is not committed). A section is scanned in its readable
+        // pieces and the rest is left out and named in the notes. A piece the
+        // header does not mark executable but whose pages are is read as code
+        // when the first pass fails. The test passes nothing and every byte
+        // is read.
+        size_t (*runs)(const void* p, size_t n, bool* readable, uint32_t* protect) = nullptr;
         // Optional: one line of detail at a time, for the log. Every scan
-        // names the release candidates it saw; a refused one also lists each
-        // CharacterControl vtable's release slot and the image's sections.
+        // names the image's section headers and the release candidates it
+        // saw. A refused one also lists every readable piece with its
+        // protection, each CharacterControl vtable's release slot, and, when
+        // `survey` is on, every hit of every pattern the search uses with the
+        // bytes around it and the check that turned it down.
         void (*note)(const char* line) = nullptr;
+        bool survey = true;
     };
 
     // A found row. build.name and build.others[].label point into this
@@ -41,6 +48,14 @@ namespace bt::finder
         Build build{};
         char  name[40] = {};
         char  other[2][48] = {};
+        // The watchdog guard's bytes as found, which its release's shape
+        // points at. They differ from kWatchdogGuard only in the je
+        // displacement, when the exact pattern was not in one place.
+        uint8_t watchdog[8] = {};
+        // How the code was found: false when the header's executable
+        // sections held it, true when it took the pieces whose pages are
+        // executable or whose header says code.
+        bool wide = false;
         unsigned long long scanMs = 0;
     };
 
