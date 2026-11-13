@@ -33,6 +33,10 @@ next day, moved only the client release, to +0x94B7660, with the same code;
 the thunk in its vtable slot stayed at +0x946330 and now jumps there.
 The 6 November patch to 1.0.0.3576 moved everything again with the code
 unchanged; patch-dlc\work\bounty-teleportation\3576 has the scripts.
+The 13 November patch to 1.0.0.3663 moved everything again. Its addresses
+are what carry\src\finder.cpp finds on that exe, and the patched blocks,
+the catch tick and the holder check kept their code. catch_update moved
+most of its body into a callee and kept its arguments.
 """
 import sys, struct
 sys.path.insert(0, r"C:\working\cd mods\No more flight restrictions\private\research")
@@ -55,6 +59,18 @@ TICK_HEAD      = "48 89 5C 24 08 48 89 6C 24 18 48 89 74 24 20 57 41 56 41 57 48
 # the watchdog release and is where 1.0.8 makes a skipped release again, then
 # the vtable slot the release is in and the handler's first 15 bytes.
 BUILDS = {
+    "1.0.0.3663": dict(
+        catch_update=0x22DFFA0,
+        releases=[
+            ("keepcatch",          0x258C064, "74 22", 0x258C044, TELEPORT_GUARD, 0x258C083, 0x5F687C8, 0x258C010, None),
+            ("keepcatch_client",   0x96E0E04, "74 22", 0x96E0DE4, TELEPORT_GUARD, 0x96E0E23, 0x59C1660, 0x973E80, 0x96E0DB0),
+            ("keepcatch_state",    0x17F4A6D, "74 20", 0x17F4A4B, TELEPORT_GUARD, 0x17F4A8A, None, None, None),
+            ("keepcatch_watchdog", 0x22E04E8, "85 FF", 0x22E04E8, WATCHDOG_GUARD, 0x22E0529, None, None, None),
+        ],
+        holder=0x21AD2A0, thunk=None, sweep=0x2AC0EFB,
+        teleport=0x2ED6240, calls=(0x2ED6FE8, 0x2ED75B9),
+        tick=0x22E0460, slot=0x1F8, teleport_head=TELEPORT_HEAD_3392,
+    ),
     "1.0.0.3576": dict(
         catch_update=0x226E700,
         releases=[
