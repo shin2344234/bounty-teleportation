@@ -486,6 +486,102 @@ int main()
         call(page, comp, out);
         Check(kept(out) && out[4] == 1, "a carried actor is kept and the registers still come back unchanged");
         *reinterpret_cast<uint32_t*>(catchc + 0x28) = 0;
+
+        // KarlusPrime's crash on exe 1.0.0.2976 with 1.0.6 (issue 28). The
+        // caller is the game's own routine, the same bytes at +0x10396BB0 on
+        // 2976 and +0xE9787A0 on 3663 apart from two field offsets, trimmed
+        // after its [r11+0x88] read. It keeps its argument in r11 across the
+        // check, and when the answer is no it reads [rcx+0x3c0] against dl,
+        // then [r11+0x88], then writes [r11+0xca]. A yes returns without
+        // touching any of them, which is why the sweep's "kept 1" line was
+        // the last one in his log. The gate opens when a map teleport starts
+        // with something held, and from then on 1.0.6 ran its carried-actor
+        // reads for every no, so r11 came back changed for every other actor
+        // this routine asked about. The routine sits at page+0x200 and calls
+        // the hooked check at page+0 by rel32, as the game's call does.
+        {
+            static const unsigned char kGameCaller[] = {
+                0x48, 0x83, 0xEC, 0x28,                         // sub rsp, 0x28
+                0x80, 0xB9, 0xCA, 0x00, 0x00, 0x00, 0x00,       // cmp byte [rcx+0xca], 0
+                0x4C, 0x8B, 0xD9,                               // mov r11, rcx
+                0x74, 0x07,                                     // je past the early answer
+                0xB0, 0x01,                                     // mov al, 1
+                0x48, 0x83, 0xC4, 0x28,                         // add rsp, 0x28
+                0xC3,                                           // ret
+                0x48, 0x8B, 0x51, 0x68,                         // mov rdx, [rcx+0x68]
+                0x48, 0x89, 0x5C, 0x24, 0x20,                   // mov [rsp+0x20], rbx
+                0x48, 0x8B, 0x8A, 0xB0, 0x00, 0x00, 0x00,       // mov rcx, [rdx+0xb0]
+                0x31, 0xD2,                                     // xor edx, edx
+                0xE8, 0xD2, 0xFD, 0xFF, 0xFF,                   // call page+0, the hooked check
+                0x84, 0xC0,                                     // test al, al
+                0x75, 0x28,                                     // jne held
+                0x38, 0x91, 0xC0, 0x03, 0x00, 0x00,             // cmp [rcx+0x3c0], dl
+                0x75, 0x20,                                     // jne held
+                0x49, 0x8D, 0x8B, 0x88, 0x00, 0x00, 0x00,       // lea rcx, [r11+0x88]
+                0x48, 0x8B, 0x01,                               // mov rax, [rcx]
+                0x0F, 0xB6, 0x40, 0x01,                         // movzx eax, byte [rax+1]
+                0x41, 0xC6, 0x83, 0xCA, 0x00, 0x00, 0x00, 0x01, // mov byte [r11+0xca], 1
+                0x48, 0x8B, 0x5C, 0x24, 0x20,                   // mov rbx, [rsp+0x20]
+                0x48, 0x83, 0xC4, 0x28,                         // add rsp, 0x28
+                0xC3,                                           // ret
+                0x48, 0x8B, 0x5C, 0x24, 0x20,                   // held: mov rbx, [rsp+0x20]
+                0x31, 0xC0,                                     // xor eax, eax
+                0x48, 0x83, 0xC4, 0x28,                         // add rsp, 0x28
+                0xC3,                                           // ret
+            };
+            memcpy(page + 0x200, kGameCaller, sizeof kGameCaller);
+            FlushInstructionCache(GetCurrentProcess(), page, 4096);
+            using RoutineFn = uint32_t (*)(void* self);
+            const auto routine = reinterpret_cast<RoutineFn>(page + 0x200);
+
+            // self is the routine's argument; its +0x68 table holds the
+            // component at +0xb0, and its +0x88 points at a state whose
+            // second byte the no path returns.
+            static uint8_t self[0x100] = {}, selfTable[0x100] = {}, state[0x10] = {};
+            static uint8_t gcomp[0x400] = {}, gactor[0x80] = {}, gtable[0x100] = {}, gcatch[0x60] = {};
+            *reinterpret_cast<uintptr_t*>(self + 0x68) = reinterpret_cast<uintptr_t>(selfTable);
+            *reinterpret_cast<uintptr_t*>(self + 0x88) = reinterpret_cast<uintptr_t>(state);
+            *reinterpret_cast<uintptr_t*>(selfTable + 0xb0) = reinterpret_cast<uintptr_t>(gcomp);
+            *reinterpret_cast<uintptr_t*>(gcomp + 8) = reinterpret_cast<uintptr_t>(gactor);
+            *reinterpret_cast<uintptr_t*>(gactor + 0x68) = reinterpret_cast<uintptr_t>(gtable);
+            *reinterpret_cast<uintptr_t*>(gtable + 0x70) = reinterpret_cast<uintptr_t>(gcatch);
+            state[1] = 0x5A;
+            gcomp[0x210] = 0;   // the game's own answer is no
+
+            // One run of the routine. A changed r11 or rcx faults on the
+            // reads after the call, and that comes back as a failed check
+            // instead of ending the test.
+            auto run = [&](uint32_t* result) -> bool {
+                self[0xca] = 0;
+                __try { *result = routine(self); }
+                __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+                return true;
+            };
+            struct Gates
+            {
+                static bool On() { return true; }
+                static bool Off() { return false; }
+                static bool Refuse(uintptr_t, uint32_t) { return false; }
+            };
+
+            uint32_t r = 0;
+            bp::keepcarried::SetGate(&Gates::Off);
+            Check(run(&r) && r == 0x5A && self[0xca] == 1,
+                  "the 2976 caller survives a no with the gate shut, as before a teleport");
+            bp::keepcarried::SetGate(&Gates::On);
+            Check(run(&r) && r == 0x5A && self[0xca] == 1,
+                  "the 2976 caller survives a no for an actor nobody carries while a teleport's gate is open");
+            *reinterpret_cast<uint32_t*>(gcatch + 0x28) = 0xA0100001;
+            bp::keepcarried::SetAccept(&Gates::Refuse);
+            Check(run(&r) && r == 0x5A && self[0xca] == 1,
+                  "the 2976 caller survives a no for an actor someone else carries");
+            bp::keepcarried::SetAccept(nullptr);
+            Check(run(&r) && r == 0 && self[0xca] == 0, "the 2976 caller takes a yes for the carried actor");
+            *reinterpret_cast<uint32_t*>(gcatch + 0x28) = 0;
+            bp::keepcarried::SetGate(nullptr);
+            Check(CountLines("[keepcarried] first call through the register-keeping entry") >= 2,
+                  "the 2976 caller's first call was written as a caller of its own");
+        }
     }
 
     // holdwatch: the sampler behind the first gate, on a fake sub-object laid
