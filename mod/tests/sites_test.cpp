@@ -404,6 +404,90 @@ int main()
         Check(CountLines("[keepcarried] 4 asked, 1 kept") == 1, "the summary counted");
     }
 
+    // keepcarried and its caller's registers. The game's check writes only
+    // rax, r8, r9 and r10, and on exe 1.0.0.3663 the caller at +0xE9787A0
+    // keeps r11, rcx and dl across the call and reads [r11+0x88] after it.
+    // Justin's crash on 13 November 2026 was that read with r11 = -1. Both
+    // the check and its caller are written here as machine code, so the
+    // compiler has no say in which registers they use. This binary is built
+    // with /guard:cf, which makes the detour's indirect calls go through the
+    // dispatch that left r11 = -1 in the game.
+    {
+        static const unsigned char kCheck[] = {
+            0x48, 0x89, 0x5C, 0x24, 0x08,             // mov [rsp+8], rbx
+            0x41, 0xB8, 0xFF, 0xFF, 0xFF, 0xFF,       // mov r8d, -1
+            0x45, 0x89, 0xC1,                         // mov r9d, r8d
+            0x45, 0x31, 0xD2,                         // xor r10d, r10d
+            0x0F, 0xB6, 0x81, 0x10, 0x02, 0x00, 0x00, // movzx eax, byte [rcx+0x210]
+            0x48, 0x8B, 0x5C, 0x24, 0x08,             // mov rbx, [rsp+8]
+            0xC3,                                     // ret
+        };
+        // void Call(check, comp, uint64_t out[5]): sets r11 and xmm5 to a
+        // marker, calls check(comp, 0) and stores r11, rcx, rdx, xmm5 and
+        // rax as they came back.
+        static const unsigned char kCaller[] = {
+            0x53,                                     // push rbx
+            0x56,                                     // push rsi
+            0x48, 0x83, 0xEC, 0x28,                   // sub rsp, 0x28
+            0x48, 0x89, 0xC8,                         // mov rax, rcx
+            0x48, 0x89, 0xD1,                         // mov rcx, rdx
+            0x4C, 0x89, 0xC3,                         // mov rbx, r8
+            0x49, 0xBB, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, // mov r11, 0x1122334455667788
+            0x66, 0x49, 0x0F, 0x6E, 0xEB,             // movq xmm5, r11
+            0x31, 0xD2,                               // xor edx, edx
+            0xFF, 0xD0,                               // call rax
+            0x4C, 0x89, 0x1B,                         // mov [rbx], r11
+            0x48, 0x89, 0x4B, 0x08,                   // mov [rbx+8], rcx
+            0x48, 0x89, 0x53, 0x10,                   // mov [rbx+0x10], rdx
+            0x66, 0x0F, 0xD6, 0x6B, 0x18,             // movq [rbx+0x18], xmm5
+            0x48, 0x89, 0x43, 0x20,                   // mov [rbx+0x20], rax
+            0x48, 0x83, 0xC4, 0x28,                   // add rsp, 0x28
+            0x5E,                                     // pop rsi
+            0x5B,                                     // pop rbx
+            0xC3,                                     // ret
+        };
+        unsigned char* page = static_cast<unsigned char*>(
+            VirtualAlloc(nullptr, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+        memcpy(page, kCheck, sizeof kCheck);
+        memcpy(page + 0x100, kCaller, sizeof kCaller);
+        FlushInstructionCache(GetCurrentProcess(), page, 4096);
+        using CallFn = void (*)(void* check, void* comp, uint64_t* out);
+        const auto call = reinterpret_cast<CallFn>(page + 0x100);
+
+        static uint8_t comp[0x300] = {}, actor[0x80] = {}, table[0x100] = {}, catchc[0x60] = {};
+        *reinterpret_cast<uintptr_t*>(comp + 8) = reinterpret_cast<uintptr_t>(actor);
+        *reinterpret_cast<uintptr_t*>(actor + 0x68) = reinterpret_cast<uintptr_t>(table);
+        *reinterpret_cast<uintptr_t*>(table + 0x70) = reinterpret_cast<uintptr_t>(catchc);
+        comp[0x210] = 0x33;
+        const uint64_t marker = 0x1122334455667788ull;
+        auto kept = [&](const uint64_t* o) {
+            return o[0] == marker && o[1] == reinterpret_cast<uint64_t>(comp) && o[2] == 0 && o[3] == marker;
+        };
+
+        uint64_t out[5] = {};
+        call(page, comp, out);
+        Check(kept(out) && out[4] == 0x33, "the machine-code check leaves r11, rcx, rdx and xmm5 alone unhooked");
+
+        Check(bp::keepcarried::Hook(reinterpret_cast<uintptr_t>(page), false), "keepcarried hooked the machine-code check");
+        Check(CountLines("[keepcarried] the holder check is entered through a stub that keeps") == 2,
+              "each hook says it goes through the register-keeping entry");
+        memset(out, 0, sizeof out);
+        call(page, comp, out);
+        if (!kept(out))
+            printf("    r11 %016llX rcx %016llX rdx %016llX xmm5 %016llX\n", static_cast<unsigned long long>(out[0]),
+                   static_cast<unsigned long long>(out[1]), static_cast<unsigned long long>(out[2]),
+                   static_cast<unsigned long long>(out[3]));
+        Check(kept(out) && out[4] == 0x33, "hooked, the original answers and the caller's registers come back unchanged");
+        Check(CountLines("[keepcarried] first call through the register-keeping entry") >= 1,
+              "the first call from the machine-code caller was written");
+
+        *reinterpret_cast<uint32_t*>(catchc + 0x28) = 0xA0100001;
+        memset(out, 0, sizeof out);
+        call(page, comp, out);
+        Check(kept(out) && out[4] == 1, "a carried actor is kept and the registers still come back unchanged");
+        *reinterpret_cast<uint32_t*>(catchc + 0x28) = 0;
+    }
+
     // holdwatch: the sampler behind the first gate, on a fake sub-object laid
     // out the way +0x2BBF2C0 reads the real one, then the hook on a wrapper
     // that calls its acquirer the way +0x2BC4200 does.

@@ -99,6 +99,12 @@ target_include_directories(SitesTest PRIVATE src ${minhook_SOURCE_DIR}/src/hde)
 target_link_libraries(SitesTest PRIVATE minhook)
 target_compile_definitions(SitesTest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
 target_compile_options(SitesTest PRIVATE /utf-8 /W3 /EHsc)
+# Control flow guard on, as in the plugins, so the test process runs the same
+# indirect-call dispatch that changed r11 under the holder check's caller.
+if(MSVC)
+    target_compile_options(SitesTest PRIVATE /guard:cf)
+    target_link_options(SitesTest PRIVATE /guard:cf)
+endif()
 
 add_custom_command(TARGET BountyProbe POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/dist"
