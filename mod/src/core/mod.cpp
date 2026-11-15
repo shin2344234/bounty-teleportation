@@ -10,6 +10,7 @@
 #include "core/paths.h"
 #include "game/errors.h"
 #include "game/catchwatch.h"
+#include "game/farhook.h"
 #include "game/holdwatch.h"
 #include "game/keepcarried.h"
 #include "game/mem.h"
@@ -696,6 +697,9 @@ namespace bp::Mod
             CloseHandle(g_thread);
             g_thread = nullptr;
         }
+        // The entries first, as the carry plugin does: a hooked entry left
+        // behind jumps into this DLL after it is gone.
+        farhook::RemoveAll();
         sites::Remove();
         Log::Shutdown();
     }
