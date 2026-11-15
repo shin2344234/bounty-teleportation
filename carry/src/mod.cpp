@@ -1242,13 +1242,15 @@ namespace
         }
         else LOG("[keepcatch] KeepCatch is 0, so a teleport releases the catch as it always has");
 
-        if (s.keepCarried)
+        // The sweep hook answers only while a teleport carry is armed, so with
+        // nothing able to arm it could only pass every call through. Up to
+        // 1.0.20 it went in anyway, on a function ten places in the game call.
+        if (s.keepCarried && !armable)
+            LOG("[keepcarried] KeepCarried does nothing without KeepCatch armed, since the release runs before the "
+                "sweep and clears the flag this reads, so the holder check is not hooked");
+        else if (s.keepCarried)
         {
-            if (!armable)
-                LOG("[keepcarried] KeepCarried does nothing without KeepCatch armed: the release runs before the "
-                    "sweep and clears the flag this reads");
-            // The sweep hook answers only while a teleport carry is armed, and
-            // tells the carry check which outlaw it kept.
+            // It tells the carry check which outlaw it kept.
             bp::keepcarried::SetGate(&KeepGate);
             bp::keepcarried::SetOnKeep(&OnKeep);
             bp::keepcarried::SetAccept(&KeepAccept);
