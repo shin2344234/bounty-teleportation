@@ -457,10 +457,12 @@ a second match somewhere the file on disk has none.
 
 ## Antivirus
 
-VirusTotal counts 1.0.20's loose plugin at 1/71 and both of its archives at
-0/68. The one is APEX, which reports the word Malicious and names nothing it
-found, and no engine flagged the same plugin inside either archive. The
-plugin read 0/70 for 1.0.0, 0/71 for 1.0.1, 0/71 for each of 1.0.3 to
+VirusTotal counts 1.0.21's loose plugin at 1/69, its DMM archive at 1/67 and
+its full archive at 1/65. The one is DeepInstinct each time, which reports the
+word MALICIOUS and names nothing it found, and no other engine flagged any of
+the three files. 1.0.20's loose plugin read 1/71, flagged by APEX, which also
+reports only the word Malicious, and both of its archives read 0/68, so 1.0.21
+is the first release whose archives are flagged too. The plugin read 0/70 for 1.0.0, 0/71 for 1.0.1, 0/71 for each of 1.0.3 to
 1.0.15, 0/70 for 1.0.16, 0/70 for 1.0.17, 0/71 for 1.0.18 and 0/71 for
 1.0.19. 1.0.2's read 1/70, the one being Microsoft's
 Trojan:Win32/Wacatac.B!ml, the label it gives a file its model dislikes rather
