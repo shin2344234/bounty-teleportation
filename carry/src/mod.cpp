@@ -402,7 +402,9 @@ namespace
     std::atomic<uintptr_t> g_playerCatch{0};
     std::atomic<uintptr_t> g_keptCatch{0};
     std::atomic<int>       g_endStrikes{0};
-    long                   g_arms = 0;
+    // Counts arms, under g_armLock. The carry check reads it before deciding
+    // to disarm, so a decision made about one arm never ends the next.
+    std::atomic<long>      g_arms{0};
 
     // Whose carry it is. An actor's own handle is the dword at +0x60, just
     // before its component table at +0x68: Bounty Probe's object dumps of 20
@@ -929,7 +931,7 @@ namespace
         // An early arm starts its own list, and the handler arming means a
         // teleport came and wanted whatever was skipped.
         ForgetSkipped();
-        const long n = g_arms;
+        const long n = g_arms.load();
         ReleaseSRWLockExclusive(&g_armLock);
         if (early)
         {
@@ -958,10 +960,23 @@ namespace
 
     // `replay` is set only when an early arm ran out with no teleport; every
     // other end of a carry forgets the skips, since a teleport wanted them.
-    void Disarm(const char* why, bool replay = false)
+    //
+    // `arm` is the arm count the caller decided on, or 0 for any. The carry
+    // check reads its conditions without the lock, and a map teleport can arm
+    // again before Disarm gets it; up to 1.0.20 that new carry was the one
+    // ended, and the releases then let go of the catch it was meant to keep.
+    void Disarm(const char* why, bool replay = false, long arm = 0)
     {
         AcquireSRWLockExclusive(&g_armLock);
         if (!g_armed.load()) { ReleaseSRWLockExclusive(&g_armLock); return; }
+        if (arm && g_arms.load() != arm)
+        {
+            const long now = g_arms.load();
+            ReleaseSRWLockExclusive(&g_armLock);
+            LOG("[teleport] not disarmed (%s): the check was about arm %ld, and arm %ld started in between", why, arm,
+                now);
+            return;
+        }
         const bool restored = !g_patched.load() || SetReleases(false);
         g_patched.store(false);
         g_armed.store(false);
@@ -992,18 +1007,19 @@ namespace
     void CheckCarry()
     {
         ExpireSkipped();
+        const long arm = g_arms.load();
         if (!g_armed.load()) return;
         if (g_earlyPending.load() && GetTickCount64() - g_armedAt.load() > kEarlyMs)
         {
             Disarm("a release let go of the player's catch early, but no map teleport followed within half a second",
-                   true);
+                   true, arm);
             return;
         }
         const uintptr_t kept = g_keptCatch.load();
         if (!kept)
         {
             if (GetTickCount64() - g_armedAt.load() > kNoKeepMs)
-                Disarm("the sweep kept nobody, so nothing came through the teleport with the player");
+                Disarm("the sweep kept nobody, so nothing came through the teleport with the player", false, arm);
             return;
         }
         uint32_t carriedBy = 0, held = 0;
@@ -1012,7 +1028,7 @@ namespace
         const bool player = StillCatch(mine) && bp::mem::Read32(mine + 0x38, &held) && held;
         if (outlaw && player) { g_endStrikes.store(0); return; }
         if (++g_endStrikes < kEndPolls) return;
-        Disarm(!outlaw ? "the outlaw is no longer carried" : "the player is no longer holding anything");
+        Disarm(!outlaw ? "the outlaw is no longer carried" : "the player is no longer holding anything", false, arm);
     }
 
     // Remembers which actor the map teleport moves, which is the body being
