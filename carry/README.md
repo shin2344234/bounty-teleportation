@@ -120,6 +120,27 @@ Do not run this alongside Bounty Probe, the research plugin it came out of.
 They patch the same bytes and hook the same function, and the second one
 loaded refuses and says so.
 
+## Stuck in a loading screen after a teleport, on 1.0.20 and before
+
+Big Apollo's log had a map teleport with a carried bounty followed by a
+loading screen that never ended. The game's check for a carry that no
+animation backs any more kept being skipped, every two seconds, until the game
+was closed. 1.0.21 skips it for the first minute after the teleport starts and
+lets the game have it after that. If a loading screen still hangs, send the
+log from that session.
+
+## Other changes in 1.0.21
+
+The log no longer locks itself twice when the last session's log cannot be
+renamed. That could crash the game while the plugin loaded, after a quick
+restart. A teleport that starts while the carry check is deciding to end the
+last one keeps its carry. KeepCarried leaves the game's holder check alone
+when nothing can arm, such as with `KeepCatch=0`. The ini the plugin writes
+on a first run now lists every build in the table.
+
+1.0.21 does not change the address search. The Xbox PC Store copy is still
+not confirmed working, and a log from it is welcome.
+
 ## Known conflict
 
 Even Faster Vanilla Animations Trimmer by kuiye123, part of Skip All Loading

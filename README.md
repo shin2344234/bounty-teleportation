@@ -346,6 +346,56 @@ Only a player who had the crash can say it is gone.
 Earlier notes said 1.0.7 fixed KarlusPrime's crash by narrowing which
 releases are skipped. It did not. The cause was this hook.
 
+## The loading screen that never ended
+
+Big Apollo's log of 15 November 2026, from 1.0.20 on exe 1.0.0.3663 with
+nothing else installed, has a map teleport arm with a carried actor held and
+then a loading screen that did not end until the game was closed 208 seconds
+later. The catch watchdog on the catch's own tick asked to let go of the
+player's server and client catches every two seconds for all of it, and every
+ask was skipped. It is the one release that is not the teleport's own, and it
+is skipped because the arrival trips it. Seth's carry on 13 November has it
+ask three times in the first six seconds and stop, so the skip only has to
+cover the start.
+
+1.0.21 skips the watchdog for the first 60 seconds after an arm and passes it
+to the game after that. With the `catch_update` hook that is the hook's own
+decision. Without the hook the watchdog's patch comes out at the same point
+and the other three stay until the carry ends. The log says when the minute
+runs out and, when the carry ends, how often the watchdog was kept from it and
+how often it went through. Seth's play of this code on 15 November, which still
+reported itself as 1.0.20, logged six skips in a 13 second carry and none let
+through. Nobody has run a carry past a minute, so the branch that lets the
+watchdog through has not been seen firing.
+
+## Smaller fixes in 1.0.21
+
+The log's rotation locked its own mutex twice when the last session's log
+could not be renamed, which happens on a quick restart while the old game
+process still holds it. The runtime aborts on that, so the game crashed while
+the plugin loaded. Both places that wrote an error there now write through
+the locked path, and `SitesTest` claims a log that another handle holds open
+and checks that the claim returns. The old code ends that test with
+`0xC0000409`.
+
+The carry check reads the early arm's age, the time since the arm and the end
+strikes without the arm lock, then calls `Disarm`. A map teleport that armed
+in between had its carry ended by a decision about the one before. `Disarm`
+now takes the arm count the check read and leaves a newer arm alone, and the
+log says it did.
+
+KeepCarried no longer hooks the holder check when nothing can arm, which is
+the case with `KeepCatch=0` or when the releases or the teleport hook fail to
+install. The hook could only pass every call through, on a function ten places
+in the game call. The log says why it is not installed.
+
+The text of `BountyTeleportation.ini`, which the plugin writes on a first run,
+stopped at exe 1.0.0.3527 and said an unlisted build gets nothing written. It
+names every build in the table now and says an unlisted build is searched for
+by its code first. BountyProbe, which is not shipped, takes its entry hooks out
+when it is unloaded, and the holdwatch case of `SitesTest` no longer sets a
+flag past the end of its fake actor.
+
 ## Builds it doesn't know
 
 RawUnderwear's 1.0.17 log of 5 November showed an exe of 332,021,760 bytes,
@@ -377,6 +427,10 @@ a different `je` displacement, code with its header flags cleared and code
 marked as data. This is aimed at RawUnderwear's Store copy and at MayoFaro's
 older build, and neither is confirmed fixed. If the finder still refuses, the
 log now says where each site went.
+
+1.0.21 changes nothing in the finder. The Store copy, RawUnderwear's report,
+is still open and the 1.0.20 logging is all there is to work from. A log
+from that copy is what is needed.
 
 `carry\src\finder.cpp` follows the rules the rows were derived by. The
 watchdog guard is in one place, its je lands past the call to catch_update,
