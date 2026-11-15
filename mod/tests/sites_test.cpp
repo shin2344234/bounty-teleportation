@@ -588,7 +588,7 @@ int main()
     // out the way +0x2BBF2C0 reads the real one, then the hook on a wrapper
     // that calls its acquirer the way +0x2BC4200 does.
     {
-        static uint8_t actor[0x80] = {}, owner[0x10] = {}, sub[0x80] = {}, c68[0x1B0] = {}, c1a0[0x600] = {};
+        static uint8_t actor[0x100] = {}, owner[0x10] = {}, sub[0x80] = {}, c68[0x1B0] = {}, c1a0[0x600] = {};
         *reinterpret_cast<uintptr_t*>(sub) = reinterpret_cast<uintptr_t>(owner);
         *reinterpret_cast<uintptr_t*>(owner + 8) = reinterpret_cast<uintptr_t>(actor);
         *reinterpret_cast<uintptr_t*>(actor + 0x68) = reinterpret_cast<uintptr_t>(c68);
