@@ -395,14 +395,16 @@ a second match somewhere the file on disk has none.
 
 ## Antivirus
 
-VirusTotal counts 1.0.19's loose plugin at 0/71, its DMM archive at 0/67 and
-the manual archive at 0/68. The plugin read 0/70 for 1.0.0, 0/71 for 1.0.1,
-0/71 for each of 1.0.3 to 1.0.15, 0/70 for 1.0.16, 0/70 for 1.0.17 and 0/71
-for 1.0.18. 1.0.2's read 1/70, the one being Microsoft's
+VirusTotal counts 1.0.20's loose plugin at 1/71 and both of its archives at
+0/68. The one is APEX, which reports the word Malicious and names nothing it
+found, and no engine flagged the same plugin inside either archive. The
+plugin read 0/70 for 1.0.0, 0/71 for 1.0.1, 0/71 for each of 1.0.3 to
+1.0.15, 0/70 for 1.0.16, 0/70 for 1.0.17, 0/71 for 1.0.18 and 0/71 for
+1.0.19. 1.0.2's read 1/70, the one being Microsoft's
 Trojan:Win32/Wacatac.B!ml, the label it gives a file its model dislikes rather
 than one it recognises. Desktop Defender found nothing in that file, and
 Microsoft passed the same plugin inside both 1.0.2 archives. Every release
-since has been clean, 1.0.4 to 1.0.7 with a third hook in them and 1.0.8
+from 1.0.3 to 1.0.19 was clean, 1.0.4 to 1.0.7 with a third hook in them and 1.0.8
 with a fourth. 1.0.9 came back clean as well, and so did 1.0.10 to 1.0.12
 with their tables for the DLC, its hotfixes and the 31 October patch.
 1.0.13, built for the 1 November patch, is clean too, and so are 1.0.14 for
