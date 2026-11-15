@@ -776,6 +776,43 @@ int main()
         DeleteFileW(bp::Paths::File(want).c_str());
     }
 
+    // Claim on a log the last session still holds open. Up to 1.0.20 its
+    // error line went through Write while Claim held the log's mutex, and
+    // the loading thread hung there for good. It runs on a thread here so
+    // a hang is a failed check and not a test that never ends.
+    {
+        const std::wstring live = bp::Paths::File(L"ClaimTest.log");
+        FILE* held = _wfopen(live.c_str(), L"w");
+        Check(held != nullptr, "made a live log the claim cannot rename");
+        if (held)
+        {
+            fputs("from the session that will not let go\n", held);
+            fflush(held);
+        }
+        bp::Log::UnclaimForTest();
+        const HANDLE t = CreateThread(
+            nullptr, 0, [](LPVOID) -> DWORD { bp::Log::Claim(L"ClaimTest"); return 0; }, nullptr, 0, nullptr);
+        const bool done = t && WaitForSingleObject(t, 10000) == WAIT_OBJECT_0;
+        if (!done)
+        {
+            printf("FAILED: Claim did not return within 10 s on a log it could not rename\n\nFAILED\n");
+            fflush(stdout);
+            ExitProcess(1);
+        }
+        CloseHandle(t);
+        Check(true, "Claim returned on a log it could not rename");
+        Check(CountLines("could not be renamed after a second of trying") == 1, "and said why in the log");
+        if (held) fclose(held);
+        bp::Log::Shutdown();
+        FILE* r = _wfopen(live.c_str(), L"rb");
+        char buf[512] = {};
+        if (r) { fread(buf, 1, sizeof buf - 1, r); fclose(r); }
+        Check(strstr(buf, "will not let go") != nullptr && strstr(buf, "could not be renamed") != nullptr,
+              "the file keeps the old session's lines with the new session's after them");
+        DeleteFileW(live.c_str());
+        DeleteFileW(bp::Paths::File(L"ClaimTest.01.log").c_str());
+    }
+
     std::vector<std::string> lines;
     bp::Log::Snapshot(lines, 400);
     printf("\n--- log ---\n");

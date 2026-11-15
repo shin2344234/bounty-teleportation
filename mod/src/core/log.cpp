@@ -28,17 +28,10 @@ namespace bp::Log
         return b;
     }
 
-    void Write(const char* level, const char* fmt, ...)
+    // Caller holds g_mu.
+    static void Append(const char* level, const char* msg)
     {
-        char msg[2048];
-        va_list ap;
-        va_start(ap, fmt);
-        vsnprintf(msg, sizeof msg, fmt, ap);
-        va_end(ap);
-
         std::string line = "[" + Stamp() + "] [" + level + "] " + msg;
-
-        std::lock_guard<std::mutex> lk(g_mu);
         g_recent.push_back(line);
         if (g_recent.size() > kKeep) g_recent.pop_front();
         if (g_file)
@@ -52,6 +45,32 @@ namespace bp::Log
             g_pending.push_back(line);
             if (g_pending.size() > kKeep) g_pending.pop_front();
         }
+    }
+
+    void Write(const char* level, const char* fmt, ...)
+    {
+        char msg[2048];
+        va_list ap;
+        va_start(ap, fmt);
+        vsnprintf(msg, sizeof msg, fmt, ap);
+        va_end(ap);
+
+        std::lock_guard<std::mutex> lk(g_mu);
+        Append(level, msg);
+    }
+
+    // The same, for code that already holds g_mu. Claim holds it through
+    // Rotate, and a Write from in there took the mutex a second time and
+    // hung the thread loading the plugin, so nothing was hooked and no log
+    // was written in exactly the case its error line was meant to report.
+    static void WriteLocked(const char* level, const char* fmt, ...)
+    {
+        char msg[2048];
+        va_list ap;
+        va_start(ap, fmt);
+        vsnprintf(msg, sizeof msg, fmt, ap);
+        va_end(ap);
+        Append(level, msg);
     }
 
     // Keep the last five sessions as well as the live one. A report needs the
@@ -110,7 +129,7 @@ namespace bp::Log
         if (ReadPendingKeep(base, pending, _countof(pending)))
         {
             if (MoveFileExW(Paths::File(live).c_str(), Paths::File(pending).c_str(), MOVEFILE_REPLACE_EXISTING))
-                Write("ok   ", "[log] the last session was a trial and did not close cleanly, so its log was "
+                WriteLocked("ok   ", "[log] the last session was a trial and did not close cleanly, so its log was "
                                "kept as %ls instead of being rotated", pending);
             ClearPendingKeep(base);
         }
@@ -172,7 +191,7 @@ namespace bp::Log
         g_base = base;
         const bool rotated = Rotate(base);
         if (!rotated)
-            Write("error", "[log] the last session's log could not be renamed after a second of trying, so it is "
+            WriteLocked("error", "[log] the last session's log could not be renamed after a second of trying, so it is "
                            "still open somewhere. This session appends to it rather than emptying it; both "
                            "sessions are in one file and the header lines mark the join.");
         Open(base, !rotated);
@@ -188,6 +207,15 @@ namespace bp::Log
     }
 
     bool RotateForTest(const wchar_t* base) { return Rotate(base); }
+
+    void UnclaimForTest()
+    {
+        std::lock_guard<std::mutex> lk(g_mu);
+        if (g_file) { fclose(g_file); g_file = nullptr; }
+        g_claimed = false;
+        g_base.clear();
+        g_keepAs.clear();
+    }
 
     void Keep(const char* why)
     {

@@ -47,6 +47,10 @@ namespace bp::Log
     // could not be renamed, in which case its contents are left alone.
     bool RotateForTest(const wchar_t* base);
 
+    // For the tests: closes the log and lets Claim run again, so a test can
+    // claim a log whose last session still holds it open.
+    void UnclaimForTest();
+
     // Lines are buffered (1 MB) and reach the disk on Flush(), on any error
     // line, and at Shutdown(). The mod thread calls Flush() ten times a
     // second. A flush per line cost session nine's 15:26 run the game: the
