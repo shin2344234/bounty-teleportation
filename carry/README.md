@@ -104,6 +104,14 @@ around such pages and follows the jumps from a vtable to the function they
 lead to. It hasn't been run on a Store copy yet, so if it stops on yours,
 send the log.
 
+1.0.20 goes further for layouts nobody here has. It accepts the same guard
+with a different jump distance when the usual one isn't found, reads code
+whose header flags were cleared, and searches again 30, 90 and 300 seconds
+after a failed first search. When it still refuses, the log lists every
+section and every candidate it saw, so one log is enough to see where it went
+wrong. MayoFaro's older build and RawUnderwear's Store copy are what this is
+for, and neither is confirmed fixed.
+
 Do not run this alongside Bounty Probe, the research plugin it came out of.
 They patch the same bytes and hook the same function, and the second one
 loaded refuses and says so.
@@ -141,6 +149,20 @@ of the burning house. The scene lets go of them the way a shortened teleport
 does, and 1.0.7 held on and never let go when no teleport came. 1.0.8 lets go
 the way the game asked if no teleport follows within half a second. If someone
 is still stuck to you, send the log.
+
+## Crashes with KeepCarried on, up to 1.0.19
+
+Justin and SoHermes had the game crash five to ten seconds after starting,
+kuodo20 on a teleport after delivering a bounty, and KarlusPrime when
+teleporting while holding one. The hook behind KeepCarried changed a register
+that the game's own code still needed after the call, and the game then read
+from a bad address. 1.0.20 puts every register back. It was not played, since
+the crash never happened on the author's machine, so if it still crashes with
+KeepCarried on, send the log. Setting `KeepCarried=0` avoids the hook, at the
+cost of the bounty not coming through a teleport.
+
+Earlier notes said 1.0.7 fixed KarlusPrime's crash. It did not, and 1.0.20 is
+the fix.
 
 ## The bounty as Damiane or Oongka
 

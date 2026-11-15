@@ -307,6 +307,37 @@ handler and the sweep changed only registers and stack slots. 1.0.19 adds
 the set for 3663, taken from what the 1.0.18 finder resolves on that exe and
 checked byte for byte by `research\verify_carry.py`.
 
+## The crash with KeepCarried
+
+Justin and SoHermes reported the game crashing five to ten seconds after
+starting with both settings on, kuodo20 a crash on a teleport after
+delivering a carried bounty, and KarlusPrime a crash when teleporting while
+holding one. Justin's minidump faults at `+0xE97881C` reading `0x87`, with
+`r11` at `0xFFFFFFFFFFFFFFFF`. The function at `+0xE9787A0` calls the holder
+check at `+0xE9787DD` and keeps its argument in `r11` across the call, then
+reads `[r11+0x88]` when the answer is no. The game's own check writes only
+`rax`, `r8`, `r9` and `r10`. The plugin's hook was compiled code built with
+`/guard:cf`, and the control flow guard dispatch behind its two indirect calls
+leaves `r11` holding a bitmap word, which is all ones for the trampoline's
+page. While a bounty is carried the hook answers yes and that read never runs,
+so the crash came when the game's own answer was no, as after a delivery.
+Only KeepCarried installs this hook, which is why
+the crash needed it on. The same function is `+0xE33B110` on 3576 and
+`+0x10396BB0` on exe 1.0.0.2976, which is where KarlusPrime's log ended.
+
+1.0.20 enters the hook through a machine code stub that saves `rcx`, `rdx`,
+`r8` to `r11` and `xmm0` to `xmm5`, calls the detour and restores all of them.
+The log names the stub at install and each calling site the first time it
+asks. `SitesTest` has a machine code holder check and a caller that keeps
+`r11`, `rcx`, `dl` and `xmm5` across it, run unarmed and with an actor kept,
+and a copy of the 2976 routine's bytes run four ways. It is built with
+`/guard:cf` so its process takes the same dispatch that broke `r11` in the
+game. The crash never happened on Seth's machine, so none of this was played.
+Only a player who had the crash can say it is gone.
+
+Earlier notes said 1.0.7 fixed KarlusPrime's crash by narrowing which
+releases are skipped. It did not. The cause was this hook.
+
 ## Builds it doesn't know
 
 RawUnderwear's 1.0.17 log of 5 November showed an exe of 332,021,760 bytes,
@@ -324,6 +355,20 @@ is the one patch site in the second code section. 1.0.19 scans around pages
 it can't read and follows a vtable slot through jmp chains and thunks to the
 function at the end. That is the likeliest cause, but nobody has run 1.0.19
 on a Store exe yet, so the finder there is still untested in play.
+
+1.0.20 widens the finder further, for layouts nobody here has. When the exact
+watchdog guard bytes are not in one place, it tries the same guard with any
+`je` displacement and keeps a hit only if it passes every other check. When
+the sections the header marks executable yield nothing, a second pass also
+reads pieces whose pages are executable now or whose header says code, since
+a protector can leave the header flags behind. Every scan logs the section
+headers. A refused scan logs every region with its protection and every hit of
+every pattern with the bytes around it, and the plugin searches again 30, 90
+and 300 seconds after a failed first search. `FinderTest` adds a decoy guard,
+a different `je` displacement, code with its header flags cleared and code
+marked as data. This is aimed at RawUnderwear's Store copy and at MayoFaro's
+older build, and neither is confirmed fixed. If the finder still refuses, the
+log now says where each site went.
 
 `carry\src\finder.cpp` follows the rules the rows were derived by. The
 watchdog guard is in one place, its je lands past the call to catch_update,
