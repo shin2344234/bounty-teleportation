@@ -31,7 +31,11 @@ read once, when the game starts.
   let go of one and all four are skipped, but only from the moment a map
   teleport starts with you holding someone until that carry ends, and only
   for you and the one you carry. Everyone else, and you the rest of the time,
-  lets go of things exactly as the game always has.
+  lets go of things exactly as the game always has. The fourth place is the
+  game's check for a carry that no animation backs any more, and that one is
+  skipped only for the first minute after the teleport starts. Up to 1.0.20
+  it was skipped for the whole carry, which could leave the loading screen
+  running until the game was closed.
 - **KeepCarried** (1) Keeps the man himself. Leaving a field removes every
   actor spawned in it unless something says it still holds him, and this says
   so. On its own it does nothing, because the release runs first and clears

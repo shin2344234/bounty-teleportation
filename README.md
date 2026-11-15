@@ -95,6 +95,14 @@ holding something when it starts, the carry is armed there, and it ends when
 the sweep keeps nobody within five seconds, when the kept outlaw is no longer
 carried, or when the player is no longer holding anything.
 
+The watchdog release is the exception. It is skipped only for the first 60
+seconds after an arm, and after that the hook passes it to the game (or, with
+the patches, its patch comes out). Up to 1.0.20 it was skipped for the whole
+carry. Big Apollo's log of 15 November 2026 on exe 1.0.0.3663 has it asking
+every two seconds for 208 seconds from a loading screen that never ended,
+where Seth's own carry has it ask three times in the first six seconds and
+stop.
+
 Up to 1.0.6 arming wrote the four patches, which skip each release for every
 catch in the game, NPCs' included. Since 1.0.7 the `catch_update` hook does the
 skipping instead, and only for the player's catch, the outlaw's, and a client

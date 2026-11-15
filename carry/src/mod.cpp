@@ -388,7 +388,8 @@ namespace
     // any of them can run. They stay written while that carry lasts and come
     // out when it ends: the sweep kept nobody within five seconds, or the
     // outlaw it kept is no longer carried, or the player is no longer holding
-    // anything.
+    // anything. The watchdog alone goes back to the game a minute after the
+    // arm (see kWatchdogMs).
     constexpr ULONGLONG kNoKeepMs       = 5000;
     constexpr int       kEndPolls       = 3;     // 300 ms of "not carried" before believing it
 
@@ -405,6 +406,24 @@ namespace
     // Counts arms, under g_armLock. The carry check reads it before deciding
     // to disarm, so a decision made about one arm never ends the next.
     std::atomic<long>      g_arms{0};
+
+    // The watchdog is the one release that is not the teleport's. It runs on
+    // the catch's own tick and drops a catch the carry animation no longer
+    // backs, and the arrival trips it, so it is skipped while the teleport
+    // runs. Up to 1.0.20 it was skipped for as long as the carry lasted. Big
+    // Apollo's log of 15 November 2026 on exe 1.0.0.3663 has a teleport arm
+    // at 13:16:37, then the watchdog asking to let go of the player's server
+    // and client catches every two seconds, every ask skipped, until the
+    // game was closed 208 seconds later from a loading screen that never
+    // ended. Seth's own carry on 13 November has it ask three times, the last
+    // 5.8 seconds after the arm, and then stop. So it is skipped for the
+    // first minute after an arm and goes through to the game after that.
+    constexpr ULONGLONG kWatchdogMs  = 60000;
+    constexpr int       kWatchdogRel = 3;   // releases[3] is keepcatch_watchdog in every row and in the finder
+    std::atomic<long>      g_wdSkipped{0};  // watchdog asks skipped since the arm
+    std::atomic<long>      g_wdPassed{0};   // watchdog asks let through once the minute was up
+    std::atomic<ULONGLONG> g_wdLastAt{0};   // tick of the last one skipped
+    std::atomic<bool>      g_wdClosed{false};
 
     // Whose carry it is. An actor's own handle is the dword at +0x60, just
     // before its component table at +0x68: Bounty Probe's object dumps of 20
@@ -749,8 +768,26 @@ namespace
                 const uint32_t mine = g_held.load();
                 const bool ours = c == g_playerCatch.load() || (want && (owner == want || carrier == want)) ||
                                   (mine && held == mine);
-                Remember(c, from, held, carrier, owner, static_cast<uint8_t>(reason), ours);
+                const ULONGLONG now = GetTickCount64();
+                const ULONGLONG since = now - g_armedAt.load();
+                const bool late = ours && rel == kWatchdogRel && since > kWatchdogMs;
+                Remember(c, from, held, carrier, owner, static_cast<uint8_t>(reason), ours && !late);
                 if (!ours) return g_catchUpdateOrig(comp, out, force, f, reason, g, h, i);
+                if (late)
+                {
+                    if (g_wdPassed.fetch_add(1) == 0)
+                        LOG("[keepcatch] the watchdog went to let go of 0x%08X on the catch of 0x%08X %llu seconds "
+                            "after the teleport armed, past the %llu seconds it is kept from that carry, so the game "
+                            "ends that catch as it would without this mod", held, owner,
+                            static_cast<unsigned long long>(since / 1000),
+                            static_cast<unsigned long long>(kWatchdogMs / 1000));
+                    return g_catchUpdateOrig(comp, out, force, f, reason, g, h, i);
+                }
+                if (rel == kWatchdogRel)
+                {
+                    g_wdSkipped.fetch_add(1);
+                    g_wdLastAt.store(now);
+                }
                 if (g_earlyPending.load())
                     KeepSkipped(c, held, carrier, force, f, reason, g_build->releases[rel].label);
                 return 0;
@@ -927,6 +964,10 @@ namespace
         g_carrier.store(owner);
         g_held.store(held);
         if (!was) g_keptCatch.store(0);
+        g_wdSkipped.store(0);
+        g_wdPassed.store(0);
+        g_wdLastAt.store(0);
+        g_wdClosed.store(false);
         ++g_arms;
         // An early arm starts its own list, and the handler arming means a
         // teleport came and wanted whatever was skipped.
@@ -977,7 +1018,8 @@ namespace
                 now);
             return;
         }
-        const bool restored = !g_patched.load() || SetReleases(false);
+        const bool wasPatched = g_patched.load();
+        const bool restored = !wasPatched || SetReleases(false);
         g_patched.store(false);
         g_armed.store(false);
         g_keptCatch.store(0);
@@ -988,12 +1030,27 @@ namespace
         g_endStrikes.store(0);
         const ULONGLONG armedAt = g_armedAt.load();
         const ULONGLONG held = GetTickCount64() - armedAt;
+        const long wdSkipped = g_wdSkipped.load();
+        const long wdPassed = g_wdPassed.load();
+        const ULONGLONG wdLastAt = g_wdLastAt.load();
         int due = 0;
         if (replay) due = ReplaySkipped();
         else ForgetSkipped();
         ReleaseSRWLockExclusive(&g_armLock);
         LOG("[teleport] the releases are back to the game's own after %llu seconds: %s",
             static_cast<unsigned long long>(held / 1000), why);
+        // With the patches written the hook never sees the watchdog's calls,
+        // so there is nothing to count.
+        if (wasPatched) {}
+        else if (wdSkipped)
+            LOG("[keepcatch] the watchdog was kept from this carry %ld time%s, the last %llu ms after the arm, and "
+                "went through to the game %ld time%s after the first %llu seconds", wdSkipped,
+                wdSkipped == 1 ? "" : "s", static_cast<unsigned long long>(wdLastAt - armedAt), wdPassed,
+                wdPassed == 1 ? "" : "s", static_cast<unsigned long long>(kWatchdogMs / 1000));
+        else
+            LOG("[keepcatch] the watchdog was never kept from this carry, and went through to the game %ld time%s "
+                "after the first %llu seconds", wdPassed, wdPassed == 1 ? "" : "s",
+                static_cast<unsigned long long>(kWatchdogMs / 1000));
         if (!restored)
             LOG_ERR("[teleport] the four releases could not all be written back to the game's own bytes, so some "
                     "stay skipped for every catch; restart the game");
@@ -1001,6 +1058,40 @@ namespace
         if (due)
             LOG("[release] %d skipped release%s will be made again at the next tick of %s catch, since no teleport "
                 "needed %s", due, due == 1 ? "" : "s", due == 1 ? "its" : "their", due == 1 ? "it" : "them");
+    }
+
+    // The minute after an arm is up and the carry is still on. The hook lets
+    // the watchdog through by itself from here; without the hook its patch
+    // is written for every catch, so it comes out, and the other three stay
+    // until the carry ends.
+    void CloseWatchdog(long arm)
+    {
+        AcquireSRWLockExclusive(&g_armLock);
+        if (!g_armed.load() || g_arms.load() != arm || g_wdClosed.load())
+        {
+            ReleaseSRWLockExclusive(&g_armLock);
+            return;
+        }
+        g_wdClosed.store(true);
+        const bool patched = g_patched.load();
+        const bool restored = !patched || bp::patch::Set(g_releaseIdx[kWatchdogRel], false);
+        const long skipped = g_wdSkipped.load();
+        const ULONGLONG lastAt = g_wdLastAt.load();
+        const ULONGLONG armedAt = g_armedAt.load();
+        ReleaseSRWLockExclusive(&g_armLock);
+        // The hook never sees the watchdog's calls while its patch is in, so
+        // only the hook's side has a count to give.
+        char count[160] = "";
+        if (!patched && skipped)
+            snprintf(count, sizeof count, " It was kept from this carry %ld time%s before that, the last %llu ms after "
+                     "the arm.", skipped, skipped == 1 ? "" : "s", static_cast<unsigned long long>(lastAt - armedAt));
+        else if (!patched)
+            snprintf(count, sizeof count, " It was never kept from this carry before that.");
+        LOG("[keepcatch] %ld: the carry has lasted %llu seconds since the teleport armed, so from here the watchdog's "
+            "release goes through to the game%s.%s",
+            arm, static_cast<unsigned long long>(kWatchdogMs / 1000),
+            patched ? (restored ? " and its patch is taken out" : ", but its patch could not be taken out") : "",
+            count);
     }
 
     // The mod thread's side, ten times a second while armed.
@@ -1015,6 +1106,7 @@ namespace
                    true, arm);
             return;
         }
+        if (!g_wdClosed.load() && GetTickCount64() - g_armedAt.load() > kWatchdogMs) CloseWatchdog(arm);
         const uintptr_t kept = g_keptCatch.load();
         if (!kept)
         {
