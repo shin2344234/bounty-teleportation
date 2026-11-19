@@ -71,7 +71,11 @@ namespace
     // by different amounts and changed none of that code. The 13 November
     // patch, 1.0.0.3663, moved them all again; catch_update moved most of
     // its body into a callee and kept its arguments, and the patched blocks
-    // kept their code. Every build is listed, and the one whose
+    // kept their code. 1.0.0.3732, installed on 19 November, moved them all
+    // once more with the patched blocks, the catch tick, the holder check
+    // and the teleport handler's prologue unchanged, and catch_update still
+    // takes the component in rcx, the out dword in rdx and force in r8b.
+    // Every build is listed, and the one whose
     // addresses all check out is the one used. research\derive_2949.py is how the later sets were
     // found: every one of them from a byte pattern or from a reference to
     // something already found, never from an offset against the old build.

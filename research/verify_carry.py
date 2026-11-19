@@ -37,6 +37,10 @@ The 13 November patch to 1.0.0.3663 moved everything again. Its addresses
 are what carry\src\finder.cpp finds on that exe, and the patched blocks,
 the catch tick and the holder check kept their code. catch_update moved
 most of its body into a callee and kept its arguments.
+1.0.0.3732, installed on 19 November, moved everything again. Its row is
+what the finder returns on that exe, and the patched blocks, the catch tick,
+the holder check and the teleport handler's prologue kept their code;
+patch-dlc\work\bounty-teleportation\3732 has the scripts.
 """
 import sys, struct
 sys.path.insert(0, r"C:\working\cd mods\No more flight restrictions\private\research")
@@ -59,6 +63,18 @@ TICK_HEAD      = "48 89 5C 24 08 48 89 6C 24 18 48 89 74 24 20 57 41 56 41 57 48
 # the watchdog release and is where 1.0.8 makes a skipped release again, then
 # the vtable slot the release is in and the handler's first 15 bytes.
 BUILDS = {
+    "1.0.0.3732": dict(
+        catch_update=0x22E1BC0,
+        releases=[
+            ("keepcatch",          0x258E4F4, "74 22", 0x258E4D4, TELEPORT_GUARD, 0x258E513, 0x5F6DB48, 0x258E4A0, None),
+            ("keepcatch_client",   0x944F1A4, "74 22", 0x944F184, TELEPORT_GUARD, 0x944F1C3, 0x59C6748, 0x9745A0, 0x944F150),
+            ("keepcatch_state",    0x17F665D, "74 20", 0x17F663B, TELEPORT_GUARD, 0x17F667A, None, None, None),
+            ("keepcatch_watchdog", 0x22E2108, "85 FF", 0x22E2108, WATCHDOG_GUARD, 0x22E2149, None, None, None),
+        ],
+        holder=0x21AEEC0, thunk=None, sweep=0x2AC364B,
+        teleport=0x2EDA790, calls=(0x2EDB538, 0x2EDBB09),
+        tick=0x22E2080, slot=0x1F8, teleport_head=TELEPORT_HEAD_3392,
+    ),
     "1.0.0.3663": dict(
         catch_update=0x22DFFA0,
         releases=[

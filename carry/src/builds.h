@@ -86,6 +86,23 @@ namespace bt
     // `jne` in between jumps past that `je` and never reads it.
     inline const Build kBuilds[] = {
         {
+            "1.0.0.3732", 0x22E1BC0,
+            {
+                { "keepcatch", 0x258E4F4, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x258E513, 0x258E4D4,
+                  kTeleportGuard, 16, 0x5F6DB48, 0x258E4A0, 0 },
+                { "keepcatch_client", 0x944F1A4, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x944F1C3, 0x944F184,
+                  kTeleportGuard, 16, 0x59C6748, 0x9745A0, 0x944F150 },
+                { "keepcatch_state", 0x17F665D, { 0x74, 0x20 }, { 0xEB, 0x20 }, 0x17F667A, 0x17F663B,
+                  kTeleportGuard, 16, 0, 0, 0 },
+                { "keepcatch_watchdog", 0x22E2108, { 0x85, 0xFF }, { 0xEB, 0x44 }, 0x22E2149, 0x22E2108,
+                  kWatchdogGuard, 8, 0, 0, 0 },
+            },
+            0x21AEEC0, 0, 0x2AC364B,
+            0x2EDA790, 0x2EDB538, 0x2EDBB09,
+            { { "the release in +0x17F6A00", 0x17F6EC3 }, { "the release in +0x22F5290", 0x22F5446 } },
+            0x22E2080, 0x1F8, kTeleportHead3392,
+        },
+        {
             "1.0.0.3663", 0x22DFFA0,
             {
                 { "keepcatch", 0x258C064, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x258C083, 0x258C044,
