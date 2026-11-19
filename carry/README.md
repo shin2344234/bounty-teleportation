@@ -98,8 +98,7 @@ adds a set for 3549. The patch of 6 November, exe 1.0.0.3576, moved all of
 them again. 1.0.17 stops on it, and 1.0.18 adds a set for 3576. The patch
 of 13 November, exe 1.0.0.3663, moved all of them once more, and 1.0.19
 adds a set for 3663. Exe 1.0.0.3732, installed on 19 November, moved all of
-them again. 1.0.21 finds them by pattern, and the next release adds a set
-for 3732.
+them again. 1.0.21 finds them by pattern, and 1.0.22 adds a set for 3732.
 
 RawUnderwear's log on 5 November came from an exe of 332,021,760 bytes, which
 is none of the builds above, and 1.0.17 stopped on it. 1.0.18 is the first
