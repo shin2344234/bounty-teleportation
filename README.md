@@ -468,6 +468,8 @@ a second match somewhere the file on disk has none.
 
 ## Antivirus
 
+1.0.22 is clean on all three files, 0/71 for the loose plugin, 0/66 for the
+DMM archive and 0/67 for the full one.
 VirusTotal counts 1.0.21's loose plugin at 1/69, its DMM archive at 1/67 and
 its full archive at 1/65. The one is DeepInstinct each time, which reports the
 word MALICIOUS and names nothing it found, and no other engine flagged any of
