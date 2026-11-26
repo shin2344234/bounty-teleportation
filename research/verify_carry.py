@@ -41,6 +41,11 @@ most of its body into a callee and kept its arguments.
 what the finder returns on that exe, and the patched blocks, the catch tick,
 the holder check and the teleport handler's prologue kept their code;
 patch-dlc\work\bounty-teleportation\3732 has the scripts.
+1.0.0.3840, game version 2.06.00 of 26 November, moved everything again and
+changed the teleport handler: it has a new prologue (TELEPORT_HEAD_3840) and
+releases through slot 0x200 again, where 3392 to 3732 had 0x1F8. Its row is
+what the finder returns on that exe; patch-dlc\work\bounty-teleportation\3840
+has the scripts.
 """
 import sys, struct
 sys.path.insert(0, r"C:\working\cd mods\No more flight restrictions\private\research")
@@ -54,6 +59,7 @@ WATCHDOG_GUARD = "85 FF 75 04 85 DB 74 3E"
 HOLDER_HEAD    = "48 89 5C 24 08 44 8B 41 1C"
 TELEPORT_HEAD  = "48 8B C4 48 89 58 10 48 89 70 18 48 89 78 20"
 TELEPORT_HEAD_3392 = "48 89 5C 24 10 4C 89 44 24 18 48 89 4C 24 08"
+TELEPORT_HEAD_3840 = "48 89 5C 24 08 48 89 74 24 18 48 89 7C 24 20"
 TICK_HEAD      = "48 89 5C 24 08 48 89 6C 24 18 48 89 74 24 20 57 41 56 41 57 48 83 EC 40 48 8B F1"
 
 # Each build: catch_update, then the four releases as
@@ -63,6 +69,18 @@ TICK_HEAD      = "48 89 5C 24 08 48 89 6C 24 18 48 89 74 24 20 57 41 56 41 57 48
 # the watchdog release and is where 1.0.8 makes a skipped release again, then
 # the vtable slot the release is in and the handler's first 15 bytes.
 BUILDS = {
+    "1.0.0.3840": dict(
+        catch_update=0x23AC850,
+        releases=[
+            ("keepcatch",          0x2670654, "74 22", 0x2670634, TELEPORT_GUARD, 0x2670673, 0x60FA460, 0x2670600, None),
+            ("keepcatch_client",   0x96100E4, "74 22", 0x96100C4, TELEPORT_GUARD, 0x9610103, 0x5B54DA0, 0x9B1960, 0x9610090),
+            ("keepcatch_state",    0x1870C8D, "74 20", 0x1870C6B, TELEPORT_GUARD, 0x1870CAA, None, None, None),
+            ("keepcatch_watchdog", 0x23ACD98, "85 FF", 0x23ACD98, WATCHDOG_GUARD, 0x23ACDD9, None, None, None),
+        ],
+        holder=0x226A6A0, thunk=None, sweep=0x2BECF9B,
+        teleport=0x301FDD0, calls=(0x3020964, 0x3020E5E),
+        tick=0x23ACD10, slot=0x200, teleport_head=TELEPORT_HEAD_3840,
+    ),
     "1.0.0.3732": dict(
         catch_update=0x22E1BC0,
         releases=[

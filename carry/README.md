@@ -3,12 +3,13 @@
 Fast travel while carrying a bounty target. He rides along on your back and is
 still worth turning in at the other end. For Crimson Desert exe 1.0.0.2944,
 1.0.0.2949, 1.0.0.2976, 1.0.0.3392, 1.0.0.3424, 1.0.0.3446, 1.0.0.3460,
-1.0.0.3462, 1.0.0.3479, 1.0.0.3527, 1.0.0.3549, 1.0.0.3576, 1.0.0.3663 or
-1.0.0.3732.
+1.0.0.3462, 1.0.0.3479, 1.0.0.3527, 1.0.0.3549, 1.0.0.3576, 1.0.0.3663,
+1.0.0.3732 or 1.0.0.3840.
 3392 is the DLC update and 3424 and 3446 its hotfixes. 3460 came out on 31
 October, 3462 and 3479 on 1 November, 3527 on 4 November, 3549 on 5
 November, 3576, game version 2.04.08, on 6 November and 3663, game version
-2.05.00, on 13 November. 3732 was installed on 19 November.
+2.05.00, on 13 November. 3732 was installed on 19 November and 3840, game
+version 2.06.00, came out on 26 November.
 
 In the unmodded game the teleport happens and he does not. You arrive alone.
 
@@ -72,7 +73,7 @@ Eight addresses are written or hooked and each is checked against the bytes
 that should be there first. The plugin carries a set of them for each game
 build it knows, 1.0.0.2944, 1.0.0.2949, 1.0.0.2976, 1.0.0.3392, 1.0.0.3424,
 1.0.0.3446, 1.0.0.3460, 1.0.0.3462, 1.0.0.3479, 1.0.0.3527, 1.0.0.3549,
-1.0.0.3576, 1.0.0.3663 and 1.0.0.3732, and uses whichever the game matches. On a build matching none of
+1.0.0.3576, 1.0.0.3663, 1.0.0.3732 and 1.0.0.3840, and uses whichever the game matches. On a build matching none of
 them, it looks for every address by the code around it, using the same
 patterns each set was read from. It uses what it finds only if every pattern
 turns up in exactly one place and the found set passes the same checks as a
@@ -99,6 +100,9 @@ them again. 1.0.17 stops on it, and 1.0.18 adds a set for 3576. The patch
 of 13 November, exe 1.0.0.3663, moved all of them once more, and 1.0.19
 adds a set for 3663. Exe 1.0.0.3732, installed on 19 November, moved all of
 them again. 1.0.21 finds them by pattern, and 1.0.22 adds a set for 3732.
+Exe 1.0.0.3840, the 26 November patch, moved all of them once more and gave
+the map teleport handler a new prologue, so the pattern finder of 1.0.22
+refuses it. The next release knows that prologue and adds a set for 3840.
 
 RawUnderwear's log on 5 November came from an exe of 332,021,760 bytes, which
 is none of the builds above, and 1.0.17 stopped on it. 1.0.18 is the first

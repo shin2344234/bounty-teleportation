@@ -8,8 +8,9 @@ hotfixes of 30 October, on 1.0.0.3460, the patch of 31 October, and on
 1.0.0.3462 and 1.0.0.3479, the two patches of 1 November, on 1.0.0.3527,
 the patch of 4 November, on 1.0.0.3549, the next day's, on 1.0.0.3576,
 game version 2.04.08, the patch of 6 November, on 1.0.0.3663, game
-version 2.05.00, the patch of 13 November, and on 1.0.0.3732, installed on
-19 November. Before
+game version 2.05.00, the patch of 13 November, on 1.0.0.3732, installed on
+19 November, and on 1.0.0.3840, game version 2.06.00, the patch of 26
+November. Before
 release, Seth carried an outlaw through a map
 teleport with 1.0.3 and with 1.0.4 on 1.0.0.2976, did it again with the 3392
 table on 1.0.0.3392, with 1.0.10 on 1.0.0.3424, and with a 1.0.11 test build
@@ -28,7 +29,8 @@ on 1.0.0.3663 with a test build that differs from 1.0.19 only in its version
 string. The pattern finder new in 1.0.18 has only been run on the archived
 exes, never in the game, since 3576 and 3663 are both in the table. The set
 for 3732 is what that finder returns on the 3732 exe, and nobody has played
-it on 3732 yet.
+it on 3732 yet. The same goes for the set for 3840, which is what the finder
+returns on that exe once it knows the new teleport prologue.
 
 Without it the teleport goes through and the outlaw does not. Two separate
 things remove him during the confirm: the teleport releases the catch, and
@@ -326,6 +328,16 @@ byte in r8b. The set for 3732 is what the finder resolves on that exe,
 checked by `research\verify_carry.py`. `patch-dlc\work\bounty-teleportation\3732`
 has the scripts.
 
+Exe 1.0.0.3840, game version 2.06.00 of 26 November, moved every address
+again. The four patched blocks, the catch tick and the holder check kept
+their code. The map teleport handler did not: it has a new prologue, and it
+releases through vtable slot 0x200 again, where 3392 to 3732 had 0x1F8. The
+actor is still its third argument, and the hook still passes all eight
+arguments on. The finder needed the new prologue to recognise the handler and
+nothing else. The set for 3840 is what the finder resolves on that exe,
+checked by `research\verify_carry.py`. `patch-dlc\work\bounty-teleportation\3840`
+has the scripts.
+
 ## The crash with KeepCarried
 
 Justin and SoHermes reported the game crashing five to ten seconds after
@@ -461,7 +473,7 @@ A pattern found in more or fewer places than it should be stops the plugin,
 and the log names it. A found row still goes through the same `BuildChecks`
 as a listed one before anything is written. The scan reads the image in
 memory and takes about a second on the mod thread. `FinderTest` proves the
-rules on all eleven archived exes, 1.0.0.2976 to 1.0.0.3732, and on copies
+rules on all twelve archived exes, 1.0.0.2976 to 1.0.0.3840, and on copies
 of them with unreadable pages cut into the scanned sections. What it can't prove
 offline is the running game's memory, where another plugin's hooks could put
 a second match somewhere the file on disk has none.

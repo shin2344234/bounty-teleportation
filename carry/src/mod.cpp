@@ -75,6 +75,9 @@ namespace
     // once more with the patched blocks, the catch tick, the holder check
     // and the teleport handler's prologue unchanged, and catch_update still
     // takes the component in rcx, the out dword in rdx and force in r8b.
+    // 1.0.0.3840, 26 November, moved them again and gave the teleport handler
+    // a new prologue and the release slot 0x200; its actor is still the third
+    // argument.
     // Every build is listed, and the one whose
     // addresses all check out is the one used. research\derive_2949.py is how the later sets were
     // found: every one of them from a byte pattern or from a reference to

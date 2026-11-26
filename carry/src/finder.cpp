@@ -888,7 +888,7 @@ namespace
         for (int i = 0; i < im.nsec; ++i)
         {
             const Sec& s = im.secs[i];
-            int nSelf = 0, nExact = 0, nLoose = 0, nTick = 0, nHead = 0, nHead3392 = 0, nHolder = 0, nSweep = 0,
+            int nSelf = 0, nExact = 0, nLoose = 0, nTick = 0, nHead = 0, nHead3392 = 0, nHead3840 = 0, nHolder = 0, nSweep = 0,
                 nSlot = 0, nSlotShape = 0, nCu = 0, nCuJe = 0;
             for (uint32_t r = s.va; r < s.end; ++r)
             {
@@ -936,6 +936,8 @@ namespace
                 if (b0 == 0x48 && avail >= 15 && memcmp(p, kTeleportHead, sizeof kTeleportHead) == 0) ++nHead;
                 if (b0 == 0x48 && avail >= 15 && memcmp(p, kTeleportHead3392, sizeof kTeleportHead3392) == 0)
                     ++nHead3392;
+                if (b0 == 0x48 && avail >= 15 && memcmp(p, kTeleportHead3840, sizeof kTeleportHead3840) == 0)
+                    ++nHead3840;
                 if (b0 == 0x48 && avail >= 9 && memcmp(p, kHolderHead, sizeof kHolderHead) == 0)
                 {
                     ++nHolder;
@@ -969,6 +971,8 @@ namespace
                                        : im.Is(f, kTeleportHead, sizeof kTeleportHead) ? "starts like the teleport handler"
                                        : im.Is(f, kTeleportHead3392, sizeof kTeleportHead3392)
                                            ? "starts like the 3392 teleport handler"
+                                       : im.Is(f, kTeleportHead3840, sizeof kTeleportHead3840)
+                                           ? "starts like the 3840 teleport handler"
                                            : "starts like neither teleport handler";
                     char fh[40] = "";
                     if (const uint8_t* q = f ? im.At(f, 15) : nullptr)
@@ -1005,10 +1009,10 @@ namespace
                 }
             }
             Note(v, "%s +0x%X..+0x%X (%s): %d self-test pairs (%d the watchdog exactly, %d but the je), %d catch tick "
-                    "prologues, %d and %d teleport prologues, %d holder heads, %d sweeps, %d release-slot calls (%d "
+                    "prologues, %d, %d and %d teleport prologues, %d holder heads, %d sweeps, %d release-slot calls (%d "
                     "with the handler's loads), %d calls to catch_update (%d with a je over them)",
                  s.name, s.va, s.end, im.Code(s) ? "code" : s.alt ? "code on a second pass" : "data", nSelf, nExact,
-                 nLoose - nExact, nTick, nHead, nHead3392, nHolder, nSweep, nSlot, nSlotShape, nCu, nCuJe);
+                 nLoose - nExact, nTick, nHead, nHead3392, nHead3840, nHolder, nSweep, nSlot, nSlotShape, nCu, nCuJe);
         }
     }
 
@@ -1112,6 +1116,7 @@ namespace
                 const uint8_t* head = nullptr;
                 if (fn && im.Is(fn, kTeleportHead, sizeof kTeleportHead)) head = kTeleportHead;
                 else if (fn && im.Is(fn, kTeleportHead3392, sizeof kTeleportHead3392)) head = kTeleportHead3392;
+                else if (fn && im.Is(fn, kTeleportHead3840, sizeof kTeleportHead3840)) head = kTeleportHead3840;
                 if (!head) continue;
                 if (fn == tfn && slot == tslot) continue;
                 if (fn == tfn)

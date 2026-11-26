@@ -71,6 +71,11 @@ namespace bt
     // 1.0.0.3392, which keeps the moved actor in its home slot instead of r13.
     inline const uint8_t kTeleportHead3392[15] = { 0x48, 0x89, 0x5C, 0x24, 0x10, 0x4C, 0x89, 0x44,
                                             0x24, 0x18, 0x48, 0x89, 0x4C, 0x24, 0x08 };
+    // mov [rsp+8],rbx / mov [rsp+18],rsi / mov [rsp+20],rdi, its prologue on
+    // 1.0.0.3840, which also parks rdx at [rsp+10] and releases through slot
+    // 0x200 again. The actor is still the third argument.
+    inline const uint8_t kTeleportHead3840[15] = { 0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74,
+                                            0x24, 0x18, 0x48, 0x89, 0x7C, 0x24, 0x20 };
 
     // The releases, in order: the release slot (0x200, or 0x1F8 from
     // 1.0.0.3392) of the server and common CharacterControl components,
@@ -85,6 +90,23 @@ namespace bt
     // test rather than the `je` below it: with something actually held, the
     // `jne` in between jumps past that `je` and never reads it.
     inline const Build kBuilds[] = {
+        {
+            "1.0.0.3840", 0x23AC850,
+            {
+                { "keepcatch", 0x2670654, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x2670673, 0x2670634,
+                  kTeleportGuard, 16, 0x60FA460, 0x2670600, 0 },
+                { "keepcatch_client", 0x96100E4, { 0x74, 0x22 }, { 0xEB, 0x22 }, 0x9610103, 0x96100C4,
+                  kTeleportGuard, 16, 0x5B54DA0, 0x9B1960, 0x9610090 },
+                { "keepcatch_state", 0x1870C8D, { 0x74, 0x20 }, { 0xEB, 0x20 }, 0x1870CAA, 0x1870C6B,
+                  kTeleportGuard, 16, 0, 0, 0 },
+                { "keepcatch_watchdog", 0x23ACD98, { 0x85, 0xFF }, { 0xEB, 0x44 }, 0x23ACDD9, 0x23ACD98,
+                  kWatchdogGuard, 8, 0, 0, 0 },
+            },
+            0x226A6A0, 0, 0x2BECF9B,
+            0x301FDD0, 0x3020964, 0x3020E5E,
+            { { "the release in +0x1871030", 0x18714F3 }, { "the release in +0x23C0710", 0x23C08C6 } },
+            0x23ACD10, 0x200, kTeleportHead3840,
+        },
         {
             "1.0.0.3732", 0x22E1BC0,
             {
