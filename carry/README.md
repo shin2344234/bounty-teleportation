@@ -11,6 +11,12 @@ November, 3576, game version 2.04.08, on 6 November and 3663, game version
 2.05.00, on 13 November. 3732 was installed on 19 November and 3840, game
 version 2.06.00, came out on 26 November.
 
+New in 1.0.23: the set for 3840, and a finder that knows the new prologue of
+the map teleport handler. On 26 November Seth loaded and unloaded a bounty on
+Broomy on 3840 with the 1.0.22 code plus that port, and the log said every
+address checked out. The 1.0.23 build itself is not tested in play. 1.0.22
+stops on 3840, so use 1.0.23 there.
+
 In the unmodded game the teleport happens and he does not. You arrive alone.
 
 ## Install
@@ -102,7 +108,7 @@ adds a set for 3663. Exe 1.0.0.3732, installed on 19 November, moved all of
 them again. 1.0.21 finds them by pattern, and 1.0.22 adds a set for 3732.
 Exe 1.0.0.3840, the 26 November patch, moved all of them once more and gave
 the map teleport handler a new prologue, so the pattern finder of 1.0.22
-refuses it. The next release knows that prologue and adds a set for 3840.
+refuses it. 1.0.23 knows that prologue and adds a set for 3840.
 
 RawUnderwear's log on 5 November came from an exe of 332,021,760 bytes, which
 is none of the builds above, and 1.0.17 stopped on it. 1.0.18 is the first

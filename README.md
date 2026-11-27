@@ -29,8 +29,13 @@ on 1.0.0.3663 with a test build that differs from 1.0.19 only in its version
 string. The pattern finder new in 1.0.18 has only been run on the archived
 exes, never in the game, since 3576 and 3663 are both in the table. The set
 for 3732 is what that finder returns on the 3732 exe, and nobody has played
-it on 3732 yet. The same goes for the set for 3840, which is what the finder
-returns on that exe once it knows the new teleport prologue.
+it on 3732 yet.
+
+1.0.23 is the release that adds 3840. It has a set for that build, and the
+finder knows the new teleport prologue. On 26 November Seth loaded and
+unloaded a bounty on Broomy on 3840 with the 1.0.22 code plus that port, and
+the log said every address checked out. The 1.0.23 build itself is not tested
+in play.
 
 Without it the teleport goes through and the outlaw does not. Two separate
 things remove him during the confirm: the teleport releases the catch, and
